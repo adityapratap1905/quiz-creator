@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Take Quiz</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.3.2/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 p-6">
+
+    <div class="max-w-3xl mx-auto bg-white p-6 rounded shadow">
+        <h1 class="text-2xl font-bold mb-4">Take Quiz</h1>
+        <form id="quizForm"></form>
+        <button id="submitQuiz" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-4">
+            Submit Quiz
+        </button>
+    </div>
+
+    <script>
+        const quizForm = document.getElementById('quizForm');
+        const submitBtn = document.getElementById('submitQuiz');
+        let questions = [];
+
+        // Fetch questions from backend
+        fetch('/get_questions')
+            .then(res => res.json())
+            .then(data => {
+                questions = data;
+                renderQuiz();
+            });
+
+        function renderQuiz() {
+            quizForm.innerHTML = '';
+            questions.forEach((q, index) => {
+                const div = document.createElement('div');
+                div.className = "mb-4 p-4 border rounded";
+
+                const questionTitle = document.createElement('p');
+                questionTitle.textContent = `${index + 1}. ${q.question}`;
+                questionTitle.className = "font-semibold mb-2";
+
+                div.appendChild(questionTitle);
+
+                q.options.forEach((opt) => {
+                    const label = document.createElement('label');
+                    label.className = "block mb-1 p-2 rounded";
+
+                    const input = document.createElement('input');
+                    input.type = 'radio';
+                    input.name = `q${index}`;
+                    input.value = opt;
+                    input.className = "mr-2";
+
+                    label.appendChild(input);
+                    label.appendChild(document.createTextNode(opt));
+                    div.appendChild(label);
+                });
+
+                quizForm.appendChild(div);
+            });
+        }
+
+        submitBtn.addEventListener('click', () => {
+            const answers = questions.map((q, index) => {
+                const selected = document.querySelector(`input[name="q${index}"]:checked`);
+                return selected ? selected.value : '';
+            });
+
+            fetch('/submit_quiz', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ answers })
+            })
+            .then(res => res.json())
+            .then(data => {
+                // Show score
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Quiz Submitted!',
+                    text: `You scored ${data.score} out of ${data.total}`
+                });
+
+                // Highlight correct and wrong answers
+                questions.forEach((q, index) => {
+                    const correctAnswer = q.answer;
+                    const options = document.getElementsByName(`q${index}`);
+                    options.forEach(opt => {
+                        const label = opt.parentElement;
+                        label.classList.remove('bg-green-200', 'bg-red-200'); // remove previous highlights
+
+                        if (opt.value === correctAnswer) {
+                            label.classList.add('bg-green-200'); // correct answer green
+                        } 
+                        if (opt.checked && opt.value !== correctAnswer) {
+                            label.classList.add('bg-red-200'); // wrong selection red
+                        }
+
+                        opt.disabled = true; // disable after submission
+                    });
+                });
+            });
+        });
+    </script>
+
+</body>
+</html>
