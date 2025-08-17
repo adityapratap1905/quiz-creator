@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Question Creator</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="bg-gray-100 p-5">
+    <div class="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-lg">
+        <h1 class="text-3xl font-bold text-center mb-6 text-blue-600">Quiz Question Creator</h1>
+
+        <div class="space-y-3 mb-5">
+            <input type="text" id="question" placeholder="Enter your question"
+                   class="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <input type="text" class="option w-full p-3 border rounded-lg" placeholder="Option A">
+            <input type="text" class="option w-full p-3 border rounded-lg" placeholder="Option B">
+            <input type="text" class="option w-full p-3 border rounded-lg" placeholder="Option C">
+            <input type="text" class="option w-full p-3 border rounded-lg" placeholder="Option D">
+            <input type="text" id="answer" placeholder="Correct Answer"
+                   class="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400">
+            <button id="addQuestion" class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
+                Add Question
+            </button>
+        </div>
+
+        <h2 class="text-2xl font-semibold mb-3">Questions Added:</h2>
+        <ul id="questionList" class="list-disc list-inside mb-5"></ul>
+
+        <button id="saveQuiz" class="w-full bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">
+            Save Quiz
+        </button>
+
+        <!-- Export Buttons -->
+        <div class="mt-4 space-x-2">
+            <button id="exportCSV" class="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg">
+                Export as CSV
+            </button>
+            <button id="exportPDF" class="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg">
+                Export as PDF
+            </button>
+        </div>
+    </div>
+
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
