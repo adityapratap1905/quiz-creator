@@ -5,15 +5,26 @@
   <title>Take Quiz</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style2.css') }}">
   <style>
-    .container { max-width: 800px; margin: 20px auto; padding: 20px; background: #fff; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);}
+    .container { 
+      max-width: 800px; 
+      margin: 20px auto; 
+      padding: 20px; 
+      background: rgba(255, 255, 255, 0.95); 
+      border-radius: 10px; 
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
     h2 { text-align: center; color: #2c3e50; }
     .question { margin: 15px 0; }
-    .option { display: block; padding: 5px 10px; margin-left: 20px; cursor: pointer; border-radius: 5px; border: 1px solid #ddd; }
+    .option { display: block; padding: 5px 10px; margin-left: 20px; cursor: pointer; border-radius: 5px; border: 1px solid #ddd; transition: 0.2s; }
+    .option:hover { background: #f0f0f0; }
     .option.correct { background: #c8f7c5; }
     .option.wrong { background: #f7c5c5; }
     #timer { font-weight: bold; font-size: 18px; color: darkred; margin-top: 10px; text-align: center; }
-    button { margin-top: 10px; padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; }
+    input[type="text"] { padding: 5px 10px; border-radius: 5px; border: 1px solid #ccc; margin-right: 10px; }
+    button { margin-top: 10px; padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; background-color: #3498db; color: white; transition: 0.3s; }
+    button:hover:not(:disabled) { background-color: #2980b9; }
     button:disabled { background: #ccc; cursor: not-allowed; }
+    #result { text-align: center; margin-top: 15px; font-size: 18px; }
   </style>
 </head>
 <body>
@@ -46,7 +57,6 @@
       const name = document.getElementById("studentName").value.trim();
       if (!name) { alert("Please enter your name"); return; }
 
-      // Start quiz via backend
       const startRes = await fetch('/start_quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -56,20 +66,17 @@
       quizId = startData.quiz_id;
       quizDuration = startData.duration;
 
-      // Check if this quiz was already submitted
       if (localStorage.getItem(`quizSubmitted_${quizId}`) === "true") {
         alert("You have already submitted this quiz!");
         return;
       }
 
-      // Save start time and student info per quiz
       localStorage.setItem(`quizStartedAt_${quizId}`, Date.now());
       localStorage.setItem("studentName", name);
 
       document.getElementById("quizForm").style.display = "block";
       document.getElementById("startBtn").disabled = true;
 
-      // Load questions
       const res = await fetch('/get_questions');
       questions = await res.json();
       localStorage.setItem(`quizQuestions_${quizId}`, JSON.stringify(questions));
@@ -156,7 +163,6 @@
     document.getElementById("submitBtn").addEventListener("click", submitQuiz);
 
     window.onload = async function() {
-      // If quiz already started, resume it
       const name = localStorage.getItem("studentName");
       if (!name) return;
 
@@ -164,11 +170,9 @@
       const data = await res.json();
       quizDuration = data.duration;
 
-      // Load the last quizId from startData
       const quizKeys = Object.keys(localStorage).filter(k => k.startsWith("quizStartedAt_"));
       if (quizKeys.length > 0) {
-        quizId = quizKeys[quizKeys.length - 1];
-        quizId = quizId.replace("quizStartedAt_", "");
+        quizId = quizKeys[quizKeys.length - 1].replace("quizStartedAt_", "");
       } else return;
 
       if (localStorage.getItem(`quizSubmitted_${quizId}`) === "true") {
@@ -190,6 +194,22 @@
         startTimer();
       }
     }
+
+    // ----------------------------
+    // Dynamic Background
+    // ----------------------------
+    const backgrounds = [
+      '/static/images/bg1.jpg',
+      '/static/images/bg2.jpg',
+      '/static/images/bg3.jpg',
+      '/static/images/bg4.jpg'
+    ];
+    const randomBg = backgrounds[Math.floor(Math.random() * backgrounds.length)];
+    document.body.style.backgroundImage = `url('${randomBg}')`;
+    document.body.style.backgroundSize = 'cover';
+    document.body.style.backgroundPosition = 'center';
+    document.body.style.backgroundRepeat = 'no-repeat';
+    document.body.style.transition = 'background 0.5s ease-in-out';
   </script>
 </body>
 </html>
