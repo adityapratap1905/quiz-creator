@@ -4,6 +4,17 @@
   <meta charset="UTF-8">
   <title>Take Quiz</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style2.css') }}">
+  <style>
+    .container { max-width: 800px; margin: 20px auto; padding: 20px; background: #fff; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);}
+    h2 { text-align: center; color: #2c3e50; }
+    .question { margin: 15px 0; }
+    .option { display: block; padding: 5px 10px; margin-left: 20px; cursor: pointer; border-radius: 5px; border: 1px solid #ddd; }
+    .option.correct { background: #c8f7c5; }
+    .option.wrong { background: #f7c5c5; }
+    #timer { font-weight: bold; font-size: 18px; color: darkred; margin-top: 10px; text-align: center; }
+    button { margin-top: 10px; padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -12,14 +23,14 @@
     <div>
       <label>Enter your name: </label>
       <input type="text" id="studentName" placeholder="Your Name">
-      <button id="startBtn" onclick="startQuiz()">Start Quiz</button>
+      <button id="startBtn">Start Quiz</button>
     </div>
 
     <div id="timer"></div>
 
     <form id="quizForm" style="display:none;">
       <div id="quiz"></div>
-      <button type="button" onclick="submitQuiz()">Submit Quiz</button>
+      <button type="button" id="submitBtn">Submit Quiz</button>
     </form>
 
     <div id="result"></div>
@@ -29,31 +40,39 @@
     let questions = [];
     let timerInterval;
     let quizDuration = 0;
-
-    async function fetchTimer() {
-      const res = await fetch('/get_timer');
-      const data = await res.json();
-      quizDuration = data.duration;
-    }
+    let quizId = "";
 
     async function startQuiz() {
       const name = document.getElementById("studentName").value.trim();
       if (!name) { alert("Please enter your name"); return; }
 
-      if (localStorage.getItem("quizStartedAt")) {
-        alert("You already started the quiz!");
+      // Start quiz via backend
+      const startRes = await fetch('/start_quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student: name })
+      });
+      const startData = await startRes.json();
+      quizId = startData.quiz_id;
+      quizDuration = startData.duration;
+
+      // Check if this quiz was already submitted
+      if (localStorage.getItem(`quizSubmitted_${quizId}`) === "true") {
+        alert("You have already submitted this quiz!");
         return;
       }
 
-      localStorage.setItem("quizStartedAt", Date.now());
+      // Save start time and student info per quiz
+      localStorage.setItem(`quizStartedAt_${quizId}`, Date.now());
       localStorage.setItem("studentName", name);
 
       document.getElementById("quizForm").style.display = "block";
       document.getElementById("startBtn").disabled = true;
 
+      // Load questions
       const res = await fetch('/get_questions');
       questions = await res.json();
-      localStorage.setItem("quizQuestions", JSON.stringify(questions));
+      localStorage.setItem(`quizQuestions_${quizId}`, JSON.stringify(questions));
 
       renderQuestions(questions);
       startTimer();
@@ -75,7 +94,7 @@
     }
 
     function startTimer() {
-      const startedAt = parseInt(localStorage.getItem("quizStartedAt"));
+      const startedAt = parseInt(localStorage.getItem(`quizStartedAt_${quizId}`));
       const endAt = startedAt + quizDuration * 1000;
 
       timerInterval = setInterval(() => {
@@ -84,7 +103,7 @@
 
         if (remaining <= 0) {
           clearInterval(timerInterval);
-          localStorage.removeItem("quizStartedAt");
+          localStorage.removeItem(`quizStartedAt_${quizId}`);
           document.getElementById("timer").innerText = "Time’s up!";
           submitQuiz();
         } else {
@@ -96,7 +115,7 @@
 
     async function submitQuiz() {
       clearInterval(timerInterval);
-      localStorage.removeItem("quizStartedAt");
+      localStorage.removeItem(`quizStartedAt_${quizId}`);
 
       let answers = [];
       questions.forEach((q, i) => {
@@ -109,7 +128,7 @@
       const res = await fetch('/submit_quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ student: student, answers: answers })
+        body: JSON.stringify({ student: student, answers: answers, quiz_id: quizId })
       });
       const data = await res.json();
 
@@ -129,29 +148,45 @@
         });
       });
 
-      localStorage.setItem("quizSubmitted", "true");
+      localStorage.setItem(`quizSubmitted_${quizId}`, "true");
+      document.getElementById("submitBtn").disabled = true;
     }
 
-    window.onload = async function() {
-      await fetchTimer();
+    document.getElementById("startBtn").addEventListener("click", startQuiz);
+    document.getElementById("submitBtn").addEventListener("click", submitQuiz);
 
-      if (localStorage.getItem("quizSubmitted") === "true") {
+    window.onload = async function() {
+      // If quiz already started, resume it
+      const name = localStorage.getItem("studentName");
+      if (!name) return;
+
+      const res = await fetch('/get_timer');
+      const data = await res.json();
+      quizDuration = data.duration;
+
+      // Load the last quizId from startData
+      const quizKeys = Object.keys(localStorage).filter(k => k.startsWith("quizStartedAt_"));
+      if (quizKeys.length > 0) {
+        quizId = quizKeys[quizKeys.length - 1];
+        quizId = quizId.replace("quizStartedAt_", "");
+      } else return;
+
+      if (localStorage.getItem(`quizSubmitted_${quizId}`) === "true") {
         document.getElementById("result").innerHTML =
-          `<p>You have already submitted the quiz.</p>
+          `<p>You have already submitted this quiz.</p>
            <p><a href="/leaderboard">View Leaderboard</a></p>`;
         document.getElementById("startBtn").disabled = true;
         return;
       }
 
-      if (localStorage.getItem("quizStartedAt")) {
-        document.getElementById("studentName").value =
-          localStorage.getItem("studentName");
+      const startedAt = localStorage.getItem(`quizStartedAt_${quizId}`);
+      if (startedAt) {
+        document.getElementById("studentName").value = name;
         document.getElementById("quizForm").style.display = "block";
         document.getElementById("startBtn").disabled = true;
 
-        questions = JSON.parse(localStorage.getItem("quizQuestions") || "[]");
+        questions = JSON.parse(localStorage.getItem(`quizQuestions_${quizId}`) || "[]");
         renderQuestions(questions);
-
         startTimer();
       }
     }
