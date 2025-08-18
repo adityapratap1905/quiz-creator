@@ -18,7 +18,7 @@
   <div>
     <label>Enter your name: </label>
     <input type="text" id="studentName" placeholder="Your Name">
-    <button onclick="startQuiz()">Start Quiz</button>
+    <button id="startBtn" onclick="startQuiz()">Start Quiz</button>
   </div>
 
   <div id="timer"></div>
@@ -31,82 +31,137 @@
 
   <script>
     let questions = [];
-    let timer;
-    let timeLeft = 60; // 1 minute
+    let timerInterval;
+    let quizDuration = 0; // seconds (set by creator)
 
-    function startQuiz() {
+    // --- fetch quiz duration from backend ---
+    async function fetchTimer() {
+      const res = await fetch('/get_timer');
+      const data = await res.json();
+      quizDuration = data.duration;  // e.g. 300 for 5 min
+    }
+
+    async function startQuiz() {
       const name = document.getElementById("studentName").value.trim();
       if (!name) { alert("Please enter your name"); return; }
 
+      // If already started, block restart
+      if (localStorage.getItem("quizStartedAt")) {
+        alert("You already started the quiz!");
+        return;
+      }
+
+      // Save start time in localStorage
+      localStorage.setItem("quizStartedAt", Date.now());
+      localStorage.setItem("studentName", name);
+
       document.getElementById("quizForm").style.display = "block";
+      document.getElementById("startBtn").disabled = true;
 
       // load questions
-      fetch('/get_questions')
-        .then(res => res.json())
-        .then(data => {
-          questions = data;
-          let html = "";
-          data.forEach((q, i) => {
-            html += `<div class="question">
-                      <p>${i+1}. ${q.question}</p>`;
-            q.options.forEach(opt => {
-              html += `<label class="option">
-                        <input type="radio" name="q${i}" value="${opt}"> ${opt}
-                      </label>`;
-            });
-            html += "</div>";
-          });
-          document.getElementById("quiz").innerHTML = html;
+      const res = await fetch('/get_questions');
+      questions = await res.json();
+      let html = "";
+      questions.forEach((q, i) => {
+        html += `<div class="question">
+                  <p>${i+1}. ${q.question}</p>`;
+        q.options.forEach(opt => {
+          html += `<label class="option">
+                    <input type="radio" name="q${i}" value="${opt}"> ${opt}
+                  </label>`;
         });
+        html += "</div>";
+      });
+      document.getElementById("quiz").innerHTML = html;
 
-      // start timer
-      timeLeft = 60;
-      timer = setInterval(() => {
-        document.getElementById("timer").innerText = "Time left: " + timeLeft + "s";
-        timeLeft--;
-        if (timeLeft < 0) {
-          clearInterval(timer);
+      startTimer();
+    }
+
+    function startTimer() {
+      const startedAt = parseInt(localStorage.getItem("quizStartedAt"));
+      const endAt = startedAt + quizDuration * 1000;
+
+      timerInterval = setInterval(() => {
+        const now = Date.now();
+        const remaining = Math.floor((endAt - now) / 1000);
+
+        if (remaining <= 0) {
+          clearInterval(timerInterval);
+          localStorage.removeItem("quizStartedAt");
+          document.getElementById("timer").innerText = "Time’s up!";
           submitQuiz();
+        } else {
+          document.getElementById("timer").innerText =
+            `Time left: ${Math.floor(remaining/60)}m ${remaining%60}s`;
         }
       }, 1000);
     }
 
-    function submitQuiz() {
-      clearInterval(timer);
+    async function submitQuiz() {
+      clearInterval(timerInterval);
+      localStorage.removeItem("quizStartedAt");
+
       let answers = [];
       questions.forEach((q, i) => {
         let chosen = document.querySelector(`input[name="q${i}"]:checked`);
         answers.push(chosen ? chosen.value : "");
       });
 
-      const student = document.getElementById("studentName").value.trim();
+      const student = localStorage.getItem("studentName");
 
-      fetch('/submit_quiz', {
+      const res = await fetch('/submit_quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ student: student, answers: answers })
-      })
-      .then(res => res.json())
-      .then(data => {
-        document.getElementById("result").innerHTML = 
-          `<h3>Your Score: ${data.score}/${data.total}</h3>
-           <p><a href="/leaderboard">View Leaderboard</a></p>`;
+      });
+      const data = await res.json();
 
-        // Highlight correct/wrong answers
-        questions.forEach((q, i) => {
-          let chosen = document.querySelector(`input[name="q${i}"]:checked`);
-          let options = document.querySelectorAll(`input[name="q${i}"]`);
-          options.forEach(opt => {
-            let label = opt.parentElement;
-            if (opt.value === q.answer) {
-              label.classList.add("correct"); // mark correct
-            }
-            if (chosen && opt === chosen && chosen.value !== q.answer) {
-              label.classList.add("wrong"); // mark wrong chosen
-            }
-          });
+      document.getElementById("result").innerHTML =
+        `<h3>Your Score: ${data.score}/${data.total}</h3>
+         <p><a href="/leaderboard">View Leaderboard</a></p>`;
+
+      // Highlight correct/wrong
+      questions.forEach((q, i) => {
+        let chosen = document.querySelector(`input[name="q${i}"]:checked`);
+        let options = document.querySelectorAll(`input[name="q${i}"]`);
+        options.forEach(opt => {
+          let label = opt.parentElement;
+          if (opt.value === q.answer) label.classList.add("correct");
+          if (chosen && opt === chosen && chosen.value !== q.answer) {
+            label.classList.add("wrong");
+          }
         });
       });
+    }
+
+    // --- Resume quiz if already started ---
+    window.onload = async function() {
+      await fetchTimer(); // load creator-set duration
+
+      if (localStorage.getItem("quizStartedAt")) {
+        document.getElementById("studentName").value =
+          localStorage.getItem("studentName");
+        document.getElementById("quizForm").style.display = "block";
+        document.getElementById("startBtn").disabled = true;
+
+        // load questions again
+        const res = await fetch('/get_questions');
+        questions = await res.json();
+        let html = "";
+        questions.forEach((q, i) => {
+          html += `<div class="question">
+                    <p>${i+1}. ${q.question}</p>`;
+          q.options.forEach(opt => {
+            html += `<label class="option">
+                      <input type="radio" name="q${i}" value="${opt}"> ${opt}
+                    </label>`;
+          });
+          html += "</div>";
+        });
+        document.getElementById("quiz").innerHTML = html;
+
+        startTimer(); // continue timer
+      }
     }
   </script>
 </body>
