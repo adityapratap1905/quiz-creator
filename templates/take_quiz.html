@@ -51,18 +51,25 @@
         return;
       }
 
-      // Save start time in localStorage
+      // Save start time + name
       localStorage.setItem("quizStartedAt", Date.now());
       localStorage.setItem("studentName", name);
 
       document.getElementById("quizForm").style.display = "block";
       document.getElementById("startBtn").disabled = true;
 
-      // load questions
+      // 🔹 Load questions from backend only once
       const res = await fetch('/get_questions');
       questions = await res.json();
+      localStorage.setItem("quizQuestions", JSON.stringify(questions)); // save copy
+
+      renderQuestions(questions);
+      startTimer();
+    }
+
+    function renderQuestions(qs) {
       let html = "";
-      questions.forEach((q, i) => {
+      qs.forEach((q, i) => {
         html += `<div class="question">
                   <p>${i+1}. ${q.question}</p>`;
         q.options.forEach(opt => {
@@ -73,8 +80,6 @@
         html += "</div>";
       });
       document.getElementById("quiz").innerHTML = html;
-
-      startTimer();
     }
 
     function startTimer() {
@@ -132,11 +137,23 @@
           }
         });
       });
+
+      // Prevent re-attempt after submission
+      localStorage.setItem("quizSubmitted", "true");
     }
 
     // --- Resume quiz if already started ---
     window.onload = async function() {
       await fetchTimer(); // load creator-set duration
+
+      // If quiz already submitted, block
+      if (localStorage.getItem("quizSubmitted") === "true") {
+        document.getElementById("result").innerHTML =
+          `<p>You have already submitted the quiz.</p>
+           <p><a href="/leaderboard">View Leaderboard</a></p>`;
+        document.getElementById("startBtn").disabled = true;
+        return;
+      }
 
       if (localStorage.getItem("quizStartedAt")) {
         document.getElementById("studentName").value =
@@ -144,21 +161,9 @@
         document.getElementById("quizForm").style.display = "block";
         document.getElementById("startBtn").disabled = true;
 
-        // load questions again
-        const res = await fetch('/get_questions');
-        questions = await res.json();
-        let html = "";
-        questions.forEach((q, i) => {
-          html += `<div class="question">
-                    <p>${i+1}. ${q.question}</p>`;
-          q.options.forEach(opt => {
-            html += `<label class="option">
-                      <input type="radio" name="q${i}" value="${opt}"> ${opt}
-                    </label>`;
-          });
-          html += "</div>";
-        });
-        document.getElementById("quiz").innerHTML = html;
+        // 🔹 Load stored questions instead of fetching new
+        questions = JSON.parse(localStorage.getItem("quizQuestions") || "[]");
+        renderQuestions(questions);
 
         startTimer(); // continue timer
       }
