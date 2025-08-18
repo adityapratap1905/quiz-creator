@@ -1,22 +1,52 @@
 [
     {
-        "question": "____name is aditya.",
+        "question": "1. She ___ going to school every day.",
         "options": [
-            "My",
-            "I",
-            "MIne",
-            "Me"
+            "(a) is",
+            "(b) are",
+            "(c) am",
+            "(d) were"
         ],
-        "answer": "My"
+        "answer": "(a) is"
     },
     {
-        "question": "We_____ are going",
+        "question": "2. They ___ playing football in the park.",
         "options": [
-            "Are",
-            "is",
-            "am",
-            "had"
+            "(a) is",
+            "(b) are",
+            "(c) am",
+            "(d) none"
         ],
-        "answer": "Are"
+        "answer": "(b) are"
+    },
+    {
+        "question": "3. My father ___ tea in the morning.",
+        "options": [
+            "(a) drink",
+            "(b) drinks",
+            "(c) drinking",
+            "(d) none"
+        ],
+        "answer": "(b) drinks"
+    },
+    {
+        "question": "4. There ___ a cat under the table.",
+        "options": [
+            "(a) is",
+            "(b) are",
+            "(c) am",
+            "(d) none"
+        ],
+        "answer": "(a) is"
+    },
+    {
+        "question": "5. I ___ happy to see you.",
+        "options": [
+            "(a) is",
+            "(b) am",
+            "(c) are",
+            "(d) none"
+        ],
+        "answer": "(b) am"
     }
 ]

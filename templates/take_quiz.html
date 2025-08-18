@@ -1,107 +1,113 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Take Quiz</title>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.3.2/dist/tailwind.min.css" rel="stylesheet">
+  <meta charset="UTF-8">
+  <title>Take Quiz</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .question { margin: 15px 0; }
+    .option { margin-left: 20px; cursor: pointer; display: block; padding: 5px; border-radius: 5px; }
+    .option.correct { background: #c8f7c5; }  /* green */
+    .option.wrong { background: #f7c5c5; }    /* red */
+    #timer { font-weight: bold; font-size: 18px; color: darkred; }
+  </style>
 </head>
-<body class="bg-gray-100 p-6">
+<body>
+  <h2>Student Quiz</h2>
 
-    <div class="max-w-3xl mx-auto bg-white p-6 rounded shadow">
-        <h1 class="text-2xl font-bold mb-4">Take Quiz</h1>
-        <form id="quizForm"></form>
-        <button id="submitQuiz" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-4">
-            Submit Quiz
-        </button>
-    </div>
+  <div>
+    <label>Enter your name: </label>
+    <input type="text" id="studentName" placeholder="Your Name">
+    <button onclick="startQuiz()">Start Quiz</button>
+  </div>
 
-    <script>
-        const quizForm = document.getElementById('quizForm');
-        const submitBtn = document.getElementById('submitQuiz');
-        let questions = [];
+  <div id="timer"></div>
+  <form id="quizForm" style="display:none;">
+    <div id="quiz"></div>
+    <button type="button" onclick="submitQuiz()">Submit Quiz</button>
+  </form>
 
-        // Fetch questions from backend
-        fetch('/get_questions')
-            .then(res => res.json())
-            .then(data => {
-                questions = data;
-                renderQuiz();
+  <div id="result"></div>
+
+  <script>
+    let questions = [];
+    let timer;
+    let timeLeft = 60; // 1 minute
+
+    function startQuiz() {
+      const name = document.getElementById("studentName").value.trim();
+      if (!name) { alert("Please enter your name"); return; }
+
+      document.getElementById("quizForm").style.display = "block";
+
+      // load questions
+      fetch('/get_questions')
+        .then(res => res.json())
+        .then(data => {
+          questions = data;
+          let html = "";
+          data.forEach((q, i) => {
+            html += `<div class="question">
+                      <p>${i+1}. ${q.question}</p>`;
+            q.options.forEach(opt => {
+              html += `<label class="option">
+                        <input type="radio" name="q${i}" value="${opt}"> ${opt}
+                      </label>`;
             });
-
-        function renderQuiz() {
-            quizForm.innerHTML = '';
-            questions.forEach((q, index) => {
-                const div = document.createElement('div');
-                div.className = "mb-4 p-4 border rounded";
-
-                const questionTitle = document.createElement('p');
-                questionTitle.textContent = `${index + 1}. ${q.question}`;
-                questionTitle.className = "font-semibold mb-2";
-
-                div.appendChild(questionTitle);
-
-                q.options.forEach((opt) => {
-                    const label = document.createElement('label');
-                    label.className = "block mb-1 p-2 rounded";
-
-                    const input = document.createElement('input');
-                    input.type = 'radio';
-                    input.name = `q${index}`;
-                    input.value = opt;
-                    input.className = "mr-2";
-
-                    label.appendChild(input);
-                    label.appendChild(document.createTextNode(opt));
-                    div.appendChild(label);
-                });
-
-                quizForm.appendChild(div);
-            });
-        }
-
-        submitBtn.addEventListener('click', () => {
-            const answers = questions.map((q, index) => {
-                const selected = document.querySelector(`input[name="q${index}"]:checked`);
-                return selected ? selected.value : '';
-            });
-
-            fetch('/submit_quiz', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ answers })
-            })
-            .then(res => res.json())
-            .then(data => {
-                // Show score
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Quiz Submitted!',
-                    text: `You scored ${data.score} out of ${data.total}`
-                });
-
-                // Highlight correct and wrong answers
-                questions.forEach((q, index) => {
-                    const correctAnswer = q.answer;
-                    const options = document.getElementsByName(`q${index}`);
-                    options.forEach(opt => {
-                        const label = opt.parentElement;
-                        label.classList.remove('bg-green-200', 'bg-red-200'); // remove previous highlights
-
-                        if (opt.value === correctAnswer) {
-                            label.classList.add('bg-green-200'); // correct answer green
-                        } 
-                        if (opt.checked && opt.value !== correctAnswer) {
-                            label.classList.add('bg-red-200'); // wrong selection red
-                        }
-
-                        opt.disabled = true; // disable after submission
-                    });
-                });
-            });
+            html += "</div>";
+          });
+          document.getElementById("quiz").innerHTML = html;
         });
-    </script>
 
+      // start timer
+      timeLeft = 60;
+      timer = setInterval(() => {
+        document.getElementById("timer").innerText = "Time left: " + timeLeft + "s";
+        timeLeft--;
+        if (timeLeft < 0) {
+          clearInterval(timer);
+          submitQuiz();
+        }
+      }, 1000);
+    }
+
+    function submitQuiz() {
+      clearInterval(timer);
+      let answers = [];
+      questions.forEach((q, i) => {
+        let chosen = document.querySelector(`input[name="q${i}"]:checked`);
+        answers.push(chosen ? chosen.value : "");
+      });
+
+      const student = document.getElementById("studentName").value.trim();
+
+      fetch('/submit_quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student: student, answers: answers })
+      })
+      .then(res => res.json())
+      .then(data => {
+        document.getElementById("result").innerHTML = 
+          `<h3>Your Score: ${data.score}/${data.total}</h3>
+           <p><a href="/leaderboard">View Leaderboard</a></p>`;
+
+        // Highlight correct/wrong answers
+        questions.forEach((q, i) => {
+          let chosen = document.querySelector(`input[name="q${i}"]:checked`);
+          let options = document.querySelectorAll(`input[name="q${i}"]`);
+          options.forEach(opt => {
+            let label = opt.parentElement;
+            if (opt.value === q.answer) {
+              label.classList.add("correct"); // mark correct
+            }
+            if (chosen && opt === chosen && chosen.value !== q.answer) {
+              label.classList.add("wrong"); // mark wrong chosen
+            }
+          });
+        });
+      });
+    }
+  </script>
 </body>
 </html>

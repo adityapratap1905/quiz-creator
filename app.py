@@ -1,14 +1,25 @@
 from flask import Flask, render_template, request, jsonify
 import json
 import os
+import random
 
 app = Flask(__name__)
 
 DATA_FILE = 'data/quizzes.json'
+RESULT_FILE = 'data/results.json'
 
-# Teacher view: add questions
+# --------------------------
+# Login
+# --------------------------
 @app.route('/')
-def index():
+def login():
+    return render_template('login.html')   # login page
+
+# --------------------------
+# Teacher (quiz creator)
+# --------------------------
+@app.route('/creator')
+def creator():
     return render_template('index.html')
 
 @app.route('/save', methods=['POST'])
@@ -19,12 +30,13 @@ def save_quiz():
         json.dump(questions, f, indent=4)
     return jsonify({'status': 'success', 'message': 'Quiz saved successfully!'})
 
-# Student view: take quiz
+# --------------------------
+# Student (take quiz)
+# --------------------------
 @app.route('/take_quiz')
 def take_quiz():
     return render_template('take_quiz.html')
 
-# Fetch questions for students
 @app.route('/get_questions')
 def get_questions():
     if os.path.exists(DATA_FILE):
@@ -32,12 +44,13 @@ def get_questions():
             questions = json.load(f)
     else:
         questions = []
+    random.shuffle(questions)  # shuffle for fairness
     return jsonify(questions)
 
-# Submit student answers
 @app.route('/submit_quiz', methods=['POST'])
 def submit_quiz():
-    data = request.json  # Expecting {"answers": [...]}
+    data = request.json  # {"student": "Name", "answers": [...]}
+    
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'r') as f:
             questions = json.load(f)
@@ -49,7 +62,31 @@ def submit_quiz():
         if i < len(data["answers"]) and q["answer"].strip().lower() == data["answers"][i].strip().lower():
             score += 1
 
+    # Save result
+    os.makedirs(os.path.dirname(RESULT_FILE), exist_ok=True)
+    results = []
+    if os.path.exists(RESULT_FILE):
+        with open(RESULT_FILE) as f:
+            results = json.load(f)
+
+    results.append({"student": data["student"], "score": score})
+    with open(RESULT_FILE, "w") as f:
+        json.dump(results, f, indent=4)
+
     return jsonify({"score": score, "total": len(questions)})
+
+# --------------------------
+# Leaderboard
+# --------------------------
+@app.route('/leaderboard')
+def leaderboard():
+    if os.path.exists(RESULT_FILE):
+        with open(RESULT_FILE) as f:
+            results = json.load(f)
+    else:
+        results = []
+    results.sort(key=lambda x: x["score"], reverse=True)
+    return render_template("leaderboard.html", results=results)
 
 if __name__ == '__main__':
     app.run(debug=True)
