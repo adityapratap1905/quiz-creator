@@ -95,8 +95,14 @@ def leaderboard():
     else:
         results = []
 
+    # Ensure each record has total
+    for r in results:
+        if "total" not in r:
+            r["total"] = "?"
+
     # Sort: highest score first, then earliest submission wins tie
     results.sort(key=lambda x: (-x["score"], x["timestamp"]))
+
     return render_template("leaderboard.html", results=results)
 
 if __name__ == '__main__':

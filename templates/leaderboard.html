@@ -17,11 +17,11 @@
         </tr>
       </thead>
       <tbody>
-        {% for i, result in enumerate(results, start=1) %}
+        {% for result in results %}
         <tr>
-          <td class="border px-4 py-2">{{ i }}</td>
+          <td class="border px-4 py-2">{{ loop.index }}</td>
           <td class="border px-4 py-2">{{ result.student }}</td>
-          <td class="border px-4 py-2">{{ result.score }}/{{ result.total }}</td>
+          <td class="border px-4 py-2">{{ result.score }}/{{ result.total or '?' }}</td>
         </tr>
         {% endfor %}
       </tbody>
