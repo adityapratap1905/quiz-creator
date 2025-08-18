@@ -1,12 +1,22 @@
 [
     {
-        "question": "pm of india",
+        "question": "____name is aditya.",
         "options": [
-            "modi",
-            "rahul",
-            "dhoni",
-            "virat"
+            "My",
+            "I",
+            "MIne",
+            "Me"
         ],
-        "answer": "modi"
+        "answer": "My"
+    },
+    {
+        "question": "We_____ are going",
+        "options": [
+            "Are",
+            "is",
+            "am",
+            "had"
+        ],
+        "answer": "Are"
     }
 ]
