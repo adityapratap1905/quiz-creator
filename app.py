@@ -27,10 +27,6 @@ def creator():
 
 @app.route('/save', methods=['POST'])
 def save_quiz():
-    """
-    Expect JSON: { "questions": [...], "duration": 5 } 
-    duration is in minutes
-    """
     data = request.json
     questions = data.get("questions", [])
     duration_minutes = data.get("duration", 5)
@@ -38,9 +34,7 @@ def save_quiz():
 
     os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
 
-    # Generate a unique quiz ID for each new quiz
     quiz_id = str(uuid.uuid4())
-
     quiz_data = {
         "quiz_id": quiz_id,
         "questions": questions,
@@ -90,9 +84,8 @@ def get_timer():
 # --------------------------
 @app.route('/start_quiz', methods=['POST'])
 def start_quiz():
-    data = request.json  # {"student": "Alice"}
+    data = request.json
     student = data.get("student")
-
     if not student:
         return jsonify({"error": "Student name required"}), 400
 
@@ -111,10 +104,9 @@ def start_quiz():
         with open(RESULT_FILE) as f:
             results = json.load(f)
 
-    # Check if student already started this quiz
     student_record = next((r for r in results if r["student"] == student and r.get("quiz_id") == quiz_id), None)
     if student_record:
-        start_time = student_record["start_time"]
+        start_time = student_record.get("start_time", datetime.now().isoformat())
     else:
         start_time = datetime.now().isoformat()
         results.append({
@@ -122,7 +114,8 @@ def start_quiz():
             "quiz_id": quiz_id,
             "score": None,
             "total": None,
-            "start_time": start_time
+            "start_time": start_time,
+            "timestamp": None
         })
         with open(RESULT_FILE, "w") as f:
             json.dump(results, f, indent=4)
@@ -138,8 +131,7 @@ def start_quiz():
 # --------------------------
 @app.route('/submit_quiz', methods=['POST'])
 def submit_quiz():
-    data = request.json  # {"student": "Name", "answers": [...], "quiz_id": "..."}
-
+    data = request.json
     quiz_id = data.get("quiz_id")
     student = data.get("student")
 
@@ -150,11 +142,10 @@ def submit_quiz():
     else:
         questions = []
 
-    score = 0
-    for i, q in enumerate(questions):
-        if i < len(data["answers"]) and q.get("answer", "").strip().lower() == data["answers"][i].strip().lower():
-            score += 1
-
+    score = sum(
+        1 for i, q in enumerate(questions)
+        if i < len(data["answers"]) and q.get("answer", "").strip().lower() == data["answers"][i].strip().lower()
+    )
     total = len(questions)
 
     os.makedirs(os.path.dirname(RESULT_FILE), exist_ok=True)
@@ -163,14 +154,16 @@ def submit_quiz():
         with open(RESULT_FILE) as f:
             results = json.load(f)
 
-    # Update or add student record for this quiz
+    # Update or add student record
+    updated = False
     for r in results:
         if r["student"] == student and r.get("quiz_id") == quiz_id:
             r["score"] = score
             r["total"] = total
             r["timestamp"] = datetime.now().isoformat()
+            updated = True
             break
-    else:
+    if not updated:
         results.append({
             "student": student,
             "quiz_id": quiz_id,
@@ -189,18 +182,31 @@ def submit_quiz():
 # --------------------------
 @app.route('/leaderboard')
 def leaderboard():
-    if os.path.exists(RESULT_FILE):
-        with open(RESULT_FILE) as f:
-            results = json.load(f)
-    else:
+    try:
+        if os.path.exists(RESULT_FILE):
+            with open(RESULT_FILE) as f:
+                results = json.load(f)
+        else:
+            results = []
+
+        # Ensure all fields exist
+        for r in results:
+            r["score"] = r.get("score") or 0
+            r["total"] = r.get("total") or "?"
+            r["timestamp"] = r.get("timestamp") or ""
+            r["quiz_id"] = r.get("quiz_id") or "default"
+
+        # Show leaderboard for latest quiz only
+        latest_quiz_id = None
+        if results:
+            latest_quiz_id = results[-1]["quiz_id"]
+            results = [r for r in results if r.get("quiz_id") == latest_quiz_id]
+
+        results.sort(key=lambda x: (-x["score"], x["timestamp"]))
+
+    except Exception as e:
+        print("Leaderboard load error:", e)
         results = []
-
-    for r in results:
-        if "total" not in r:
-            r["total"] = "?"
-
-    # Sort by score descending, timestamp ascending
-    results.sort(key=lambda x: (-x.get("score", 0), x.get("timestamp", "")))
 
     return render_template("leaderboard.html", results=results)
 
