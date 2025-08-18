@@ -3,6 +3,7 @@ import json
 import os
 import random
 from datetime import datetime
+import uuid  # for unique quiz IDs
 
 app = Flask(__name__)
 
@@ -37,7 +38,11 @@ def save_quiz():
 
     os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
 
+    # Generate a unique quiz ID for each new quiz
+    quiz_id = str(uuid.uuid4())
+
     quiz_data = {
+        "quiz_id": quiz_id,
         "questions": questions,
         "duration": duration_seconds
     }
@@ -45,7 +50,7 @@ def save_quiz():
     with open(DATA_FILE, 'w') as f:
         json.dump(quiz_data, f, indent=4)
 
-    return jsonify({'status': 'success', 'message': 'Quiz saved successfully!'})
+    return jsonify({'status': 'success', 'message': 'Quiz saved successfully!', 'quiz_id': quiz_id})
 
 # --------------------------
 # Student (take quiz)
@@ -95,8 +100,10 @@ def start_quiz():
         with open(DATA_FILE, 'r') as f:
             quiz_data = json.load(f)
             duration = quiz_data.get("duration", DEFAULT_QUIZ_DURATION)
+            quiz_id = quiz_data.get("quiz_id")
     else:
         duration = DEFAULT_QUIZ_DURATION
+        quiz_id = "default"
 
     os.makedirs(os.path.dirname(RESULT_FILE), exist_ok=True)
     results = []
@@ -104,13 +111,15 @@ def start_quiz():
         with open(RESULT_FILE) as f:
             results = json.load(f)
 
-    student_record = next((r for r in results if r["student"] == student and "start_time" in r), None)
+    # Check if student already started this quiz
+    student_record = next((r for r in results if r["student"] == student and r.get("quiz_id") == quiz_id), None)
     if student_record:
         start_time = student_record["start_time"]
     else:
         start_time = datetime.now().isoformat()
         results.append({
             "student": student,
+            "quiz_id": quiz_id,
             "score": None,
             "total": None,
             "start_time": start_time
@@ -120,7 +129,8 @@ def start_quiz():
 
     return jsonify({
         "start_time": start_time,
-        "duration": duration
+        "duration": duration,
+        "quiz_id": quiz_id
     })
 
 # --------------------------
@@ -128,7 +138,10 @@ def start_quiz():
 # --------------------------
 @app.route('/submit_quiz', methods=['POST'])
 def submit_quiz():
-    data = request.json  # {"student": "Name", "answers": [...]}
+    data = request.json  # {"student": "Name", "answers": [...], "quiz_id": "..."}
+
+    quiz_id = data.get("quiz_id")
+    student = data.get("student")
 
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'r') as f:
@@ -150,15 +163,17 @@ def submit_quiz():
         with open(RESULT_FILE) as f:
             results = json.load(f)
 
+    # Update or add student record for this quiz
     for r in results:
-        if r["student"] == data["student"]:
+        if r["student"] == student and r.get("quiz_id") == quiz_id:
             r["score"] = score
             r["total"] = total
             r["timestamp"] = datetime.now().isoformat()
             break
     else:
         results.append({
-            "student": data["student"],
+            "student": student,
+            "quiz_id": quiz_id,
             "score": score,
             "total": total,
             "timestamp": datetime.now().isoformat()
@@ -184,6 +199,7 @@ def leaderboard():
         if "total" not in r:
             r["total"] = "?"
 
+    # Sort by score descending, timestamp ascending
     results.sort(key=lambda x: (-x.get("score", 0), x.get("timestamp", "")))
 
     return render_template("leaderboard.html", results=results)
