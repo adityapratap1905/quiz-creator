@@ -1,0 +1,140 @@
+/* -------------------------
+   General Page
+------------------------- */
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f3f4f6; /* light gray */
+    margin: 0;
+    padding: 0;
+}
+
+/* -------------------------
+   Container
+------------------------- */
+.container {
+    max-width: 800px;
+    margin: 2rem auto;
+    padding: 2rem;
+    background-color: #ffffff;
+    border-radius: 1rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* -------------------------
+   Quiz Title
+------------------------- */
+h1.quiz-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1e40af; /* blue-800 */
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+/* -------------------------
+   Timer
+------------------------- */
+#timer {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #ef4444; /* red-500 */
+    text-align: right;
+    margin-bottom: 1rem;
+}
+
+/* -------------------------
+   Question Card
+------------------------- */
+.question-card {
+    background-color: #f9fafb; /* gray-50 */
+    border-left: 5px solid #3b82f6; /* blue-500 */
+    padding: 1.5rem;
+    border-radius: 0.75rem;
+    margin-bottom: 1.5rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.question-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.1);
+}
+
+.question-card h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+/* -------------------------
+   Options
+------------------------- */
+.option {
+    display: block;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+    background-color: #ffffff;
+    border: 2px solid #e5e7eb; /* gray-300 */
+    border-radius: 0.5rem;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.option:hover {
+    background-color: #3b82f6; /* blue-500 */
+    color: #ffffff;
+    border-color: #2563eb; /* blue-600 */
+}
+
+.option.selected {
+    background-color: #2563eb; /* blue-600 */
+    color: #ffffff;
+    border-color: #1e40af; /* blue-800 */
+}
+
+/* -------------------------
+   Buttons
+------------------------- */
+button {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.2s;
+}
+
+button:hover {
+    transform: translateY(-2px);
+}
+
+#submitQuiz {
+    background-color: #10b981; /* green-500 */
+    color: white;
+}
+
+#submitQuiz:hover {
+    background-color: #059669; /* green-600 */
+}
+
+/* -------------------------
+   Feedback
+------------------------- */
+.feedback {
+    margin-top: 0.5rem;
+    font-weight: 500;
+    color: #ef4444; /* red-500 */
+}
+
+/* -------------------------
+   Result Section
+------------------------- */
+#result {
+    text-align: center;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1e3a8a; /* blue-900 */
+    margin-top: 2rem;
+}
