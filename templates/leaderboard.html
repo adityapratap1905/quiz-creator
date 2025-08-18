@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Leaderboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.3.2/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 p-6">
+  <div class="max-w-2xl mx-auto bg-white p-6 rounded shadow">
+    <h1 class="text-2xl font-bold mb-4">Leaderboard</h1>
+    <table class="table-auto w-full border-collapse border">
+      <thead>
+        <tr class="bg-gray-200">
+          <th class="border px-4 py-2">Rank</th>
+          <th class="border px-4 py-2">Student</th>
+          <th class="border px-4 py-2">Score</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for i, result in enumerate(results, start=1) %}
+        <tr>
+          <td class="border px-4 py-2">{{ i }}</td>
+          <td class="border px-4 py-2">{{ result.student }}</td>
+          <td class="border px-4 py-2">{{ result.score }}/{{ result.total }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>
