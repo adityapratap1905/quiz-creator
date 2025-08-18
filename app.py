@@ -1,7 +1,8 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify
 import json
 import os
 import random
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -9,28 +10,11 @@ DATA_FILE = 'data/quizzes.json'
 RESULT_FILE = 'data/results.json'
 
 # --------------------------
-# Ensure data folder exists
-# --------------------------
-os.makedirs("data", exist_ok=True)
-
-# --------------------------
 # Login
 # --------------------------
 @app.route('/')
 def login():
-    return render_template('login.html')   # Show login.html
-
-@app.route('/login', methods=['POST'])
-def do_login():
-    role = request.form.get("role")   # "teacher" or "student"
-    name = request.form.get("name")
-
-    if role == "teacher":
-        return redirect(url_for("creator"))
-    elif role == "student":
-        return redirect(url_for("take_quiz", student=name))
-    else:
-        return "Invalid role!", 400
+    return render_template('login.html')   # login page
 
 # --------------------------
 # Teacher (quiz creator)
@@ -42,6 +26,7 @@ def creator():
 @app.route('/save', methods=['POST'])
 def save_quiz():
     questions = request.json
+    os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
     with open(DATA_FILE, 'w') as f:
         json.dump(questions, f, indent=4)
     return jsonify({'status': 'success', 'message': 'Quiz saved successfully!'})
@@ -51,8 +36,7 @@ def save_quiz():
 # --------------------------
 @app.route('/take_quiz')
 def take_quiz():
-    student = request.args.get("student", "Anonymous")
-    return render_template('take_quiz.html', student=student)
+    return render_template('take_quiz.html')
 
 @app.route('/get_questions')
 def get_questions():
@@ -67,8 +51,7 @@ def get_questions():
 @app.route('/submit_quiz', methods=['POST'])
 def submit_quiz():
     data = request.json  # {"student": "Name", "answers": [...]}
-    student = data.get("student", "Anonymous")
-
+    
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'r') as f:
             questions = json.load(f)
@@ -80,22 +63,26 @@ def submit_quiz():
         if i < len(data["answers"]) and q["answer"].strip().lower() == data["answers"][i].strip().lower():
             score += 1
 
-    # Save result
+    total = len(questions)
+
+    # Save result with timestamp
+    os.makedirs(os.path.dirname(RESULT_FILE), exist_ok=True)
     results = []
     if os.path.exists(RESULT_FILE):
         with open(RESULT_FILE) as f:
             results = json.load(f)
 
     results.append({
-        "student": student,
+        "student": data["student"],
         "score": score,
-        "total": len(questions)
+        "total": total,
+        "timestamp": datetime.now().isoformat()
     })
 
     with open(RESULT_FILE, "w") as f:
         json.dump(results, f, indent=4)
 
-    return jsonify({"student": student, "score": score, "total": len(questions)})
+    return jsonify({"score": score, "total": total})
 
 # --------------------------
 # Leaderboard
@@ -107,9 +94,10 @@ def leaderboard():
             results = json.load(f)
     else:
         results = []
-    results.sort(key=lambda x: x["score"], reverse=True)
-    return render_template("leaderboard.html", results=results)
 
+    # Sort: highest score first, then earliest submission wins tie
+    results.sort(key=lambda x: (-x["score"], x["timestamp"]))
+    return render_template("leaderboard.html", results=results)
 
 if __name__ == '__main__':
     app.run(debug=True)
