@@ -8,7 +8,7 @@ app = Flask(__name__)
 
 DATA_FILE = 'data/quizzes.json'
 RESULT_FILE = 'data/results.json'
-QUIZ_DURATION = 300  # seconds (5 minutes)
+DEFAULT_QUIZ_DURATION = 300  # default 5 minutes in seconds
 
 # --------------------------
 # Login
@@ -26,10 +26,25 @@ def creator():
 
 @app.route('/save', methods=['POST'])
 def save_quiz():
-    questions = request.json
+    """
+    Expect JSON: { "questions": [...], "duration": 5 } 
+    duration is in minutes
+    """
+    data = request.json
+    questions = data.get("questions", [])
+    duration_minutes = data.get("duration", 5)
+    duration_seconds = duration_minutes * 60
+
     os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
+
+    quiz_data = {
+        "questions": questions,
+        "duration": duration_seconds
+    }
+
     with open(DATA_FILE, 'w') as f:
-        json.dump(questions, f, indent=4)
+        json.dump(quiz_data, f, indent=4)
+
     return jsonify({'status': 'success', 'message': 'Quiz saved successfully!'})
 
 # --------------------------
@@ -43,9 +58,11 @@ def take_quiz():
 def get_questions():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'r') as f:
-            questions = json.load(f)
+            quiz_data = json.load(f)
+            questions = quiz_data.get("questions", [])
     else:
         questions = []
+
     random.shuffle(questions)
     return jsonify(questions)
 
@@ -54,7 +71,14 @@ def get_questions():
 # --------------------------
 @app.route('/get_timer')
 def get_timer():
-    return jsonify({"duration": QUIZ_DURATION})
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, 'r') as f:
+            quiz_data = json.load(f)
+            duration = quiz_data.get("duration", DEFAULT_QUIZ_DURATION)
+    else:
+        duration = DEFAULT_QUIZ_DURATION
+
+    return jsonify({"duration": duration})
 
 # --------------------------
 # Start quiz
@@ -67,13 +91,19 @@ def start_quiz():
     if not student:
         return jsonify({"error": "Student name required"}), 400
 
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, 'r') as f:
+            quiz_data = json.load(f)
+            duration = quiz_data.get("duration", DEFAULT_QUIZ_DURATION)
+    else:
+        duration = DEFAULT_QUIZ_DURATION
+
     os.makedirs(os.path.dirname(RESULT_FILE), exist_ok=True)
     results = []
     if os.path.exists(RESULT_FILE):
         with open(RESULT_FILE) as f:
             results = json.load(f)
 
-    # Check if this student already started
     student_record = next((r for r in results if r["student"] == student and "start_time" in r), None)
     if student_record:
         start_time = student_record["start_time"]
@@ -90,7 +120,7 @@ def start_quiz():
 
     return jsonify({
         "start_time": start_time,
-        "duration": QUIZ_DURATION
+        "duration": duration
     })
 
 # --------------------------
@@ -102,7 +132,8 @@ def submit_quiz():
 
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'r') as f:
-            questions = json.load(f)
+            quiz_data = json.load(f)
+            questions = quiz_data.get("questions", [])
     else:
         questions = []
 
@@ -153,7 +184,6 @@ def leaderboard():
         if "total" not in r:
             r["total"] = "?"
 
-    # Sort by score descending, timestamp ascending
     results.sort(key=lambda x: (-x.get("score", 0), x.get("timestamp", "")))
 
     return render_template("leaderboard.html", results=results)

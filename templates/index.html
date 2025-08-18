@@ -10,13 +10,19 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <!-- jsPDF for PDF export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body class="bg-gray-100 p-5">
     <div class="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-lg">
         <h1 class="text-3xl font-bold text-center mb-6 text-blue-600">Quiz Question Creator</h1>
+
+        <!-- Timer Input -->
+        <div class="mb-5">
+            <label for="quizDuration" class="block mb-2 font-semibold">Set Quiz Duration (minutes):</label>
+            <input type="number" id="quizDuration" value="5" min="1" max="180"
+                   class="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+        </div>
 
         <div class="space-y-3 mb-5">
             <input type="text" id="question" placeholder="Enter your question"
@@ -51,6 +57,59 @@
     </div>
 
     <!-- Custom JS -->
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <script>
+        let questions = [];
+
+        document.getElementById('addQuestion').addEventListener('click', () => {
+            const questionText = document.getElementById('question').value.trim();
+            const options = Array.from(document.querySelectorAll('.option')).map(o => o.value.trim());
+            const answer = document.getElementById('answer').value.trim();
+
+            if (!questionText || options.some(o => !o) || !answer) {
+                Swal.fire('Error', 'Please fill in all fields', 'error');
+                return;
+            }
+
+            questions.push({ question: questionText, options: options, answer: answer });
+
+            // Update question list
+            const list = document.getElementById('questionList');
+            const li = document.createElement('li');
+            li.textContent = questionText;
+            list.appendChild(li);
+
+            // Clear input fields
+            document.getElementById('question').value = '';
+            document.querySelectorAll('.option').forEach(o => o.value = '');
+            document.getElementById('answer').value = '';
+        });
+
+        document.getElementById('saveQuiz').addEventListener('click', () => {
+            const duration = parseInt(document.getElementById('quizDuration').value);
+            if (questions.length === 0) {
+                Swal.fire('Error', 'Add at least one question', 'error');
+                return;
+            }
+            if (isNaN(duration) || duration < 1) {
+                Swal.fire('Error', 'Please enter a valid duration', 'error');
+                return;
+            }
+
+            fetch('/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ questions: questions, duration: duration })
+            })
+            .then(res => res.json())
+            .then(data => {
+                Swal.fire('Success', data.message, 'success');
+                questions = [];
+                document.getElementById('questionList').innerHTML = '';
+            })
+            .catch(err => Swal.fire('Error', 'Failed to save quiz', 'error'));
+        });
+
+        // Optional: implement exportCSV and exportPDF here
+    </script>
 </body>
 </html>
