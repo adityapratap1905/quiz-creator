@@ -3,7 +3,7 @@ import json
 import os
 import random
 from datetime import datetime
-import uuid  # for unique quiz IDs
+import uuid
 
 # AI clients
 from openai import OpenAI
@@ -68,7 +68,7 @@ def generate_quiz():
     if not prompt:
         return jsonify({"error": "Prompt is required"}), 400
 
-    quiz = None
+    quiz_text = None
     error_msg = None
 
     # Try OpenAI if selected
@@ -78,28 +78,36 @@ def generate_quiz():
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are a quiz generator AI."},
-                    {"role": "user", "content": f"Generate 5 MCQs with 4 options and correct answers based on: {prompt}"}
+                    {"role": "user", "content": f"Generate 5 multiple-choice questions in JSON format with 4 options and 1 correct answer based on: {prompt}"}
                 ],
                 temperature=0.7
             )
-            quiz = response.choices[0].message.content
+            quiz_text = response.choices[0].message.content
 
         except Exception as e:
             error_msg = str(e)
 
     # Fallback to Gemini if OpenAI fails or user chose Gemini
-    if ai_choice.lower() == "gemini" or (quiz is None and error_msg):
+    if ai_choice.lower() == "gemini" or (quiz_text is None and error_msg):
         try:
             model = genai.GenerativeModel("gemini-1.5-flash")
             gemini_response = model.generate_content(
-                f"Generate 5 multiple-choice questions with 4 options and correct answers based on: {prompt}"
+                f"Generate 5 multiple-choice questions in JSON format with 4 options and 1 correct answer based on: {prompt}"
             )
-            quiz = gemini_response.text
+            quiz_text = gemini_response.text
 
         except Exception as e:
             return jsonify({"error": f"Both AI failed. Gemini error: {str(e)}"}), 500
 
-    return jsonify({"quiz": quiz})
+    # Parse AI output into JSON safely
+    try:
+        quiz_data = json.loads(quiz_text)
+        if not isinstance(quiz_data, list):
+            quiz_data = [{"question": quiz_text, "options": [], "answer": ""}]
+    except json.JSONDecodeError:
+        quiz_data = [{"question": quiz_text, "options": [], "answer": ""}]
+
+    return jsonify({"quiz": quiz_data})
 
 # --------------------------
 # Student (take quiz)
