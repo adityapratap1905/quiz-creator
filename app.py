@@ -1,4 +1,4 @@
-import openai
+from openai import OpenAI
 from flask import Flask, render_template, request, jsonify
 import json
 import os
@@ -8,8 +8,8 @@ import uuid  # for unique quiz IDs
 
 app = Flask(__name__)
 
-# Load OpenAI API key from environment variable (set this in Render)
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Create OpenAI client (reads key from environment)
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 DATA_FILE = 'data/quizzes.json'
 RESULT_FILE = 'data/results.json'
@@ -62,7 +62,7 @@ def generate_quiz():
         return jsonify({"error": "Prompt is required"}), 400
 
     try:
-        response = openai.chat.completions.create(
+        response = client.chat.completions.create(
             model="gpt-4o-mini",   # lightweight + cheap model
             messages=[
                 {"role": "system", "content": "You are a quiz generator AI. Generate 5 MCQs in JSON format."},
