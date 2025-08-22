@@ -119,10 +119,9 @@ Output strictly as a JSON array with each question like this:
     for q in quiz_data:
         q.setdefault("question", "")
         opts = q.get("options", [])
-        q["options"] = (opts + ["", "", "", ""])[:4]  # always 4 options
+        q["options"] = (opts + ["", "", "", ""])[:4]
         q.setdefault("answer", "")
 
-    # If AI failed completely, fallback to single empty question
     if not quiz_data:
         quiz_data = [{"question": quiz_text or "", "options": ["", "", "", ""], "answer": ""}]
 
@@ -187,8 +186,8 @@ def start_quiz():
         results.append({
             "student": student,
             "quiz_id": quiz_id,
-            "score": None,
-            "total": None,
+            "score": 0,
+            "total": len(quiz_data.get("questions", [])),
             "start_time": start_time,
             "timestamp": None
         })
@@ -206,24 +205,30 @@ def submit_quiz():
     data = request.json
     quiz_id = data.get("quiz_id")
     student = data.get("student")
+    student_answers = data.get("answers", [])
 
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'r') as f:
             quiz_data = json.load(f)
             questions = quiz_data.get("questions", [])
     else:
-        questions = []
+        return jsonify({"error": "Quiz not found"}), 404
 
-    score = sum(
-        1 for i, q in enumerate(questions)
-        if i < len(data["answers"]) and q.get("answer", "").strip().lower() == data["answers"][i].strip().lower()
-    )
+    # Calculate score
+    score = 0
+    for i, q in enumerate(questions):
+        correct_answer = q.get("answer", "").strip().lower()
+        submitted_answer = student_answers[i].strip().lower() if i < len(student_answers) else ""
+        if correct_answer and correct_answer == submitted_answer:
+            score += 1
+
     total = len(questions)
 
+    # Save results
     os.makedirs(os.path.dirname(RESULT_FILE), exist_ok=True)
     results = []
     if os.path.exists(RESULT_FILE):
-        with open(RESULT_FILE) as f:
+        with open(RESULT_FILE, "r") as f:
             results = json.load(f)
 
     updated = False
@@ -257,12 +262,13 @@ def leaderboard():
         else:
             results = []
 
+        # Ensure numeric score
         for r in results:
-            r["score"] = r.get("score") or 0
-            r["total"] = r.get("total") or "?"
-            r["timestamp"] = r.get("timestamp") or ""
-            r["quiz_id"] = r.get("quiz_id") or "default"
+            r["score"] = int(r.get("score", 0))
+            r["total"] = int(r.get("total", 0))
+            r["timestamp"] = r.get("timestamp", "")
 
+        # Show latest quiz leaderboard
         latest_quiz_id = results[-1]["quiz_id"] if results else None
         if latest_quiz_id:
             results = [r for r in results if r.get("quiz_id") == latest_quiz_id]
@@ -274,8 +280,5 @@ def leaderboard():
 
     return render_template("leaderboard.html", results=results)
 
-# --------------------------
-# Run app
-# --------------------------
 if __name__ == '__main__':
     app.run(debug=True)
