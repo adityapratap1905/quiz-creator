@@ -13,14 +13,32 @@
       <input type="text" name="username" placeholder="Enter your name" required>
 
       <label>Select Role:</label>
-      <select name="role" required>
+      <select name="role" id="roleSelect" required>
         <option value="">--Select--</option>
         <option value="teacher">Teacher</option>
         <option value="student">Student</option>
       </select>
 
+      <!-- Password field for teacher only -->
+      <input type="password" name="password" id="passwordField" placeholder="Enter password (only for teacher)" style="display:none;">
+
       <button type="submit">Login</button>
     </form>
   </div>
+
+  <script>
+    const roleSelect = document.getElementById("roleSelect");
+    const passwordField = document.getElementById("passwordField");
+
+    roleSelect.addEventListener("change", function() {
+      if (this.value === "teacher") {
+        passwordField.style.display = "block"; // show password for teacher
+        passwordField.required = true;
+      } else {
+        passwordField.style.display = "none"; // hide for student
+        passwordField.required = false;
+      }
+    });
+  </script>
 </body>
 </html>

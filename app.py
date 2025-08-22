@@ -19,6 +19,7 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 DATA_FILE = 'data/quizzes.json'
 RESULT_FILE = 'data/results.json'
 DEFAULT_QUIZ_DURATION = 300  # default 5 minutes
+TEACHER_PASSWORD = "admin123"  # password for teachers
 
 # --------------------------
 # Login & Session Management
@@ -43,9 +44,14 @@ def login():
 def do_login():
     username = request.form.get("username", "").strip()
     role = request.form.get("role")
+    password = request.form.get("password", "").strip()  # get password
 
     if not username or role not in ("teacher", "student"):
         return redirect(url_for("login"))
+
+    # Check password for teacher
+    if role == "teacher" and password != TEACHER_PASSWORD:
+        return "Invalid password for teacher", 403
 
     session["username"] = username
     session["role"] = role
