@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <title>Quiz Creator Dashboard</title>
   <link rel="stylesheet" href="static/css/style.css">
+  <style>
+    .question { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
+    .question label { display: block; margin-top: 5px; font-weight: bold; }
+    .opt, .qText, .ans { width: 95%; margin-top: 3px; padding: 5px; }
+    .ai-actions label, .duration label { margin-left: 5px; font-weight: bold; }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -12,8 +18,8 @@
     <!-- AI Quiz Generator -->
     <div class="section">
       <h3>Generate Quiz with AI</h3>
-      <textarea id="aiPrompt" placeholder="Enter topic or paste a paragraph..."></textarea>
-      <div class="ai-actions">
+      <textarea id="aiPrompt" placeholder="Enter topic or paste a paragraph..." rows="4" style="width:100%;"></textarea>
+      <div class="ai-actions" style="margin-top:10px;">
         <select id="aiChoice">
           <option value="openai">OpenAI GPT</option>
           <option value="gemini">Google Gemini</option>
@@ -22,7 +28,7 @@
         <input type="number" id="numQuestions" value="5" min="1" max="50">
         <button class="btn ai-generate" onclick="generateQuiz()">Generate Quiz</button>
       </div>
-      <div id="aiStatus" class="status"></div>
+      <div id="aiStatus" class="status" style="margin-top:5px;color:green;"></div>
     </div>
 
     <hr>
@@ -32,16 +38,25 @@
       <h3>Build Quiz Manually</h3>
       <div id="questions"></div>
       <button class="btn add-q" onclick="addQuestion()">Add Question</button>
-      <div class="duration">
+      <div class="duration" style="margin-top:10px;">
         <label>Duration (minutes):</label>
         <input type="number" id="duration" value="5" min="1">
       </div>
-      <button class="btn save" onclick="saveQuiz()">Save Quiz</button>
+      <button class="btn save" onclick="saveQuiz()" style="margin-top:10px;">Save Quiz</button>
     </div>
   </div>
 
   <script>
-    let questionsDiv = document.getElementById("questions");
+    const questionsDiv = document.getElementById("questions");
+
+    // Escape HTML special characters
+    function escapeHTML(text) {
+      return text.replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+    }
 
     function addQuestion(q = null) {
       const div = document.createElement("div");
@@ -53,14 +68,16 @@
 
       div.innerHTML = `
         <label>Question:</label>
-        <input type="text" class="qText" value="${questionText}">
+        <input type="text" class="qText" value="${escapeHTML(questionText)}">
+
         <label>Options:</label>
-        <input type="text" class="opt" value="${options[0]}">
-        <input type="text" class="opt" value="${options[1]}">
-        <input type="text" class="opt" value="${options[2]}">
-        <input type="text" class="opt" value="${options[3]}">
+        <input type="text" class="opt" value="${escapeHTML(options[0])}">
+        <input type="text" class="opt" value="${escapeHTML(options[1])}">
+        <input type="text" class="opt" value="${escapeHTML(options[2])}">
+        <input type="text" class="opt" value="${escapeHTML(options[3])}">
+
         <label>Answer:</label>
-        <input type="text" class="ans" value="${answerText}">
+        <input type="text" class="ans" value="${escapeHTML(answerText)}">
       `;
       questionsDiv.appendChild(div);
     }
@@ -71,9 +88,7 @@
         const qText = div.querySelector(".qText").value.trim();
         const options = Array.from(div.querySelectorAll(".opt")).map(i => i.value.trim());
         const ans = div.querySelector(".ans").value.trim();
-        if (qText) {
-          questions.push({ question: qText, options: options, answer: ans });
-        }
+        if (qText) questions.push({ question: qText, options, answer: ans });
       });
 
       const duration = parseInt(document.getElementById("duration").value) || 5;
@@ -82,7 +97,7 @@
         const res = await fetch("/save", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ questions: questions, duration: duration })
+          body: JSON.stringify({ questions, duration })
         });
         const data = await res.json();
         alert(data.message);
@@ -107,10 +122,10 @@
         const res = await fetch("/generate_quiz", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: prompt, ai_choice: aiChoice, num_questions: numQuestions })
+          body: JSON.stringify({ prompt, ai_choice: aiChoice, num_questions: numQuestions })
         });
-        const data = await res.json();
 
+        const data = await res.json();
         if (data.error) {
           document.getElementById("aiStatus").innerText = "Error: " + data.error;
           return;

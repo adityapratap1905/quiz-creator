@@ -1,9 +1,6 @@
 from flask import Flask, render_template, request, jsonify
-import json
-import os
-import random
+import json, os, random, re, uuid
 from datetime import datetime
-import uuid
 
 # AI clients
 from openai import OpenAI
@@ -19,7 +16,7 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 DATA_FILE = 'data/quizzes.json'
 RESULT_FILE = 'data/results.json'
-DEFAULT_QUIZ_DURATION = 300  # default 5 minutes in seconds
+DEFAULT_QUIZ_DURATION = 300  # default 5 minutes
 
 # --------------------------
 # Login
@@ -43,7 +40,6 @@ def save_quiz():
     duration_seconds = duration_minutes * 60
 
     os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
-
     quiz_id = str(uuid.uuid4())
     quiz_data = {
         "quiz_id": quiz_id,
@@ -64,18 +60,16 @@ def generate_quiz():
     data = request.json
     prompt = data.get("prompt", "").strip()
     ai_choice = data.get("ai_choice", "openai")
-    num_questions = int(data.get("num_questions", 5))  # how many questions to generate
+    num_questions = int(data.get("num_questions", 5))
 
     if not prompt:
         return jsonify({"error": "Prompt is required"}), 400
 
-    quiz_text = None
-    error_msg = None
+    instruction = f"""
+Generate {num_questions} multiple-choice questions based on the following topic/paragraph:
+{prompt}
 
-    json_instruction = f"""
-Generate {num_questions} multiple-choice questions based on the topic/paragraph: {prompt}.
-Output strictly in this JSON format:
-
+Output strictly as a JSON array with each question like this:
 [
   {{
     "question": "Question text",
@@ -85,39 +79,51 @@ Output strictly in this JSON format:
 ]
 """
 
-    # OpenAI
+    quiz_text = None
+
+    # Try OpenAI
     if ai_choice.lower() == "openai":
         try:
             response = openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "You are a quiz generator AI."},
-                    {"role": "user", "content": json_instruction}
+                    {"role": "system", "content": "You are a helpful quiz generator."},
+                    {"role": "user", "content": instruction}
                 ],
                 temperature=0.7
             )
             quiz_text = response.choices[0].message.content
-        except Exception as e:
-            error_msg = str(e)
+        except Exception:
+            quiz_text = None
 
-    # Gemini fallback
-    if ai_choice.lower() == "gemini" or (quiz_text is None and error_msg):
+    # Fallback to Gemini
+    if ai_choice.lower() == "gemini" or not quiz_text:
         try:
             model = genai.GenerativeModel("gemini-1.5-flash")
-            gemini_response = model.generate_content(json_instruction)
+            gemini_response = model.generate_content(instruction)
             quiz_text = gemini_response.text
         except Exception as e:
-            return jsonify({"error": f"Both AI failed. Gemini error: {str(e)}"}), 500
+            return jsonify({"error": f"Both AI failed: {str(e)}"}), 500
 
-    # Safely parse JSON
+    # Safely extract JSON
     try:
-        quiz_data = json.loads(quiz_text)
-        # Ensure each question has required fields
-        for q in quiz_data:
-            q.setdefault("question", "")
-            q.setdefault("options", ["", "", "", ""])
-            q.setdefault("answer", "")
-    except (json.JSONDecodeError, TypeError):
+        match = re.search(r"\[.*\]", quiz_text, re.DOTALL)
+        if match:
+            quiz_data = json.loads(match.group(0))
+        else:
+            quiz_data = []
+    except Exception:
+        quiz_data = []
+
+    # Ensure each question has proper fields
+    for q in quiz_data:
+        q.setdefault("question", "")
+        opts = q.get("options", [])
+        q["options"] = (opts + ["", "", "", ""])[:4]  # always 4 options
+        q.setdefault("answer", "")
+
+    # If AI failed completely, fallback to single empty question
+    if not quiz_data:
         quiz_data = [{"question": quiz_text or "", "options": ["", "", "", ""], "answer": ""}]
 
     return jsonify({"quiz": quiz_data})
@@ -149,7 +155,6 @@ def get_timer():
             duration = quiz_data.get("duration", DEFAULT_QUIZ_DURATION)
     else:
         duration = DEFAULT_QUIZ_DURATION
-
     return jsonify({"duration": duration})
 
 @app.route('/start_quiz', methods=['POST'])
