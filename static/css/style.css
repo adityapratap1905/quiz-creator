@@ -1,51 +1,87 @@
+/* Global Styles */
 body {
-    font-family: Arial, sans-serif;
-    background: #f0f4f8;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #f0f4f8, #d9e8ff);
     color: #333;
     text-align: center;
     padding: 20px;
+    margin: 0;
 }
 
+/* Container Card */
 .container {
-    background: white;
-    max-width: 600px;
+    background: #ffffff;
+    max-width: 650px;
     margin: auto;
-    padding: 20px;
-    border-radius: 15px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    padding: 25px 30px;
+    border-radius: 18px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
+.container:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 25px rgba(0,0,0,0.18);
+}
+
+/* Input Fields */
 input {
     display: block;
-    width: 90%;
-    margin: 10px auto;
-    padding: 10px;
-    border-radius: 8px;
+    width: 92%;
+    margin: 12px auto;
+    padding: 12px;
+    border-radius: 10px;
     border: 1px solid #ccc;
+    font-size: 16px;
+    transition: border-color 0.2s, box-shadow 0.2s;
 }
 
+input:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 6px rgba(0,123,255,0.4);
+    outline: none;
+}
+
+/* Buttons */
 button {
-    padding: 10px 20px;
-    margin: 10px;
+    padding: 12px 24px;
+    margin: 12px 6px;
     border: none;
     background: #007bff;
-    color: white;
-    border-radius: 8px;
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 500;
+    border-radius: 10px;
     cursor: pointer;
+    transition: background 0.3s ease, transform 0.2s ease;
 }
 
 button:hover {
     background: #0056b3;
+    transform: scale(1.05);
 }
 
+button:active {
+    transform: scale(0.98);
+}
+
+/* Quiz List */
 ul {
     list-style: none;
     padding: 0;
+    margin-top: 15px;
 }
 
 li {
+    background: #f8f9fa;
+    margin: 8px 0;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 15px;
+    text-align: left;
+    transition: background 0.2s ease;
+}
+
+li:hover {
     background: #e9ecef;
-    margin: 5px 0;
-    padding: 10px;
-    border-radius: 5px;
 }
