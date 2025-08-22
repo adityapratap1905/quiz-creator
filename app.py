@@ -1,12 +1,14 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 import json, os, random, re, uuid
 from datetime import datetime
+from functools import wraps
 
 # AI clients
 from openai import OpenAI
 import google.generativeai as genai
 
 app = Flask(__name__)
+app.secret_key = "your_secret_key_here"  # Required for session handling
 
 # --------------------------
 # Configure API keys
@@ -19,20 +21,55 @@ RESULT_FILE = 'data/results.json'
 DEFAULT_QUIZ_DURATION = 300  # default 5 minutes
 
 # --------------------------
-# Login
+# Login & Session Management
 # --------------------------
+def login_required(role=None):
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            if "username" not in session:
+                return redirect(url_for("login"))
+            if role and session.get("role") != role:
+                return "Access denied", 403
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
+
 @app.route('/')
 def login():
     return render_template('login.html')
 
+@app.route('/login', methods=['POST'])
+def do_login():
+    username = request.form.get("username", "").strip()
+    role = request.form.get("role")
+
+    if not username or role not in ("teacher", "student"):
+        return redirect(url_for("login"))
+
+    session["username"] = username
+    session["role"] = role
+
+    if role == "teacher":
+        return redirect(url_for("creator"))
+    else:
+        return redirect(url_for("take_quiz"))
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
 # --------------------------
-# Teacher (quiz creator)
+# Teacher (Quiz Creator)
 # --------------------------
 @app.route('/creator')
+@login_required(role="teacher")
 def creator():
     return render_template('index.html')
 
 @app.route('/save', methods=['POST'])
+@login_required(role="teacher")
 def save_quiz():
     data = request.json
     questions = data.get("questions", [])
@@ -52,10 +89,8 @@ def save_quiz():
 
     return jsonify({'status': 'success', 'message': 'Quiz saved successfully!', 'quiz_id': quiz_id})
 
-# --------------------------
-# AI Quiz Generator
-# --------------------------
 @app.route('/generate_quiz', methods=['POST'])
+@login_required(role="teacher")
 def generate_quiz():
     data = request.json
     prompt = data.get("prompt", "").strip()
@@ -80,8 +115,6 @@ Output strictly as a JSON array with each question like this:
 """
 
     quiz_text = None
-
-    # Try OpenAI
     if ai_choice.lower() == "openai":
         try:
             response = openai_client.chat.completions.create(
@@ -96,7 +129,6 @@ Output strictly as a JSON array with each question like this:
         except Exception:
             quiz_text = None
 
-    # Fallback to Gemini
     if ai_choice.lower() == "gemini" or not quiz_text:
         try:
             model = genai.GenerativeModel("gemini-1.5-flash")
@@ -105,17 +137,12 @@ Output strictly as a JSON array with each question like this:
         except Exception as e:
             return jsonify({"error": f"Both AI failed: {str(e)}"}), 500
 
-    # Safely extract JSON
     try:
         match = re.search(r"\[.*\]", quiz_text, re.DOTALL)
-        if match:
-            quiz_data = json.loads(match.group(0))
-        else:
-            quiz_data = []
+        quiz_data = json.loads(match.group(0)) if match else []
     except Exception:
         quiz_data = []
 
-    # Ensure each question has proper fields
     for q in quiz_data:
         q.setdefault("question", "")
         opts = q.get("options", [])
@@ -128,13 +155,15 @@ Output strictly as a JSON array with each question like this:
     return jsonify({"quiz": quiz_data})
 
 # --------------------------
-# Student routes
+# Student Routes
 # --------------------------
 @app.route('/take_quiz')
+@login_required(role="student")
 def take_quiz():
     return render_template('take_quiz.html')
 
 @app.route('/get_questions')
+@login_required(role="student")
 def get_questions():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'r') as f:
@@ -147,6 +176,7 @@ def get_questions():
     return jsonify(questions)
 
 @app.route('/get_timer')
+@login_required(role="student")
 def get_timer():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'r') as f:
@@ -157,6 +187,7 @@ def get_timer():
     return jsonify({"duration": duration})
 
 @app.route('/start_quiz', methods=['POST'])
+@login_required(role="student")
 def start_quiz():
     data = request.json
     student = data.get("student")
@@ -203,6 +234,7 @@ def start_quiz():
     })
 
 @app.route('/submit_quiz', methods=['POST'])
+@login_required(role="student")
 def submit_quiz():
     data = request.json
     quiz_id = data.get("quiz_id")
@@ -216,7 +248,6 @@ def submit_quiz():
     else:
         return jsonify({"error": "Quiz not found"}), 404
 
-    # Calculate score
     score = 0
     for i, q in enumerate(questions):
         correct_answer = q.get("answer", "").strip().lower()
@@ -226,7 +257,6 @@ def submit_quiz():
 
     total = len(questions)
 
-    # Save results
     os.makedirs(os.path.dirname(RESULT_FILE), exist_ok=True)
     results = []
     if os.path.exists(RESULT_FILE):
@@ -256,13 +286,14 @@ def submit_quiz():
     return jsonify({"score": score, "total": total})
 
 @app.route('/leaderboard')
+@login_required()
 def leaderboard():
     results = []
     try:
         if os.path.exists(RESULT_FILE):
             with open(RESULT_FILE) as f:
                 results = json.load(f)
-        # Normalize results
+
         for r in results:
             r["score"] = int(r.get("score", 0))
             r["total"] = int(r.get("total", 0))
@@ -273,13 +304,13 @@ def leaderboard():
         if latest_quiz_id:
             results = [r for r in results if r.get("quiz_id") == latest_quiz_id]
 
-        # Sort by score descending, then timestamp ascending
         results.sort(key=lambda x: (-x["score"], x["timestamp"]))
     except Exception as e:
         print("Leaderboard error:", e)
         results = []
 
     return render_template("leaderboard.html", results=results)
+
 
 if __name__ == '__main__':
     app.run(debug=True)

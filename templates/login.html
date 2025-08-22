@@ -9,33 +9,18 @@
   <div class="container">
     <h1>Quiz Platform Login</h1>
 
-    <form id="loginForm">
-      <input type="text" id="username" placeholder="Enter your name">
-      <input type="password" id="password" placeholder="Enter password (leave empty if student)">
+    <form action="{{ url_for('do_login') }}" method="POST">
+      <input type="text" name="username" placeholder="Enter your name" required>
+
+      <label>Select Role:</label>
+      <select name="role" required>
+        <option value="">--Select--</option>
+        <option value="teacher">Teacher</option>
+        <option value="student">Student</option>
+      </select>
+
       <button type="submit">Login</button>
     </form>
   </div>
-
-  <script>
-    document.getElementById("loginForm").addEventListener("submit", function(e) {
-      e.preventDefault();
-      const username = document.getElementById("username").value.trim();
-      const password = document.getElementById("password").value.trim();
-
-      if (!username) {
-        alert("Please enter your name!");
-        return;
-      }
-
-      if (password === "admin123") {
-        // Teacher mode
-        window.location.href = "/creator";
-      } else {
-        // Student mode
-        localStorage.setItem("studentName", username);
-        window.location.href = "/take_quiz";
-      }
-    });
-  </script>
 </body>
 </html>
