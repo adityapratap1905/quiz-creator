@@ -40,6 +40,7 @@
 <script>
 let quizId = null;
 let timerInterval;
+let totalQuestions = 0;
 
 async function startQuiz() {
   const studentName = document.getElementById("studentName").value.trim();
@@ -53,7 +54,7 @@ async function startQuiz() {
   const data = await res.json();
   quizId = data.quiz_id;
 
-  loadQuestions();
+  await loadQuestions();
   startTimer(data.duration);
   loadLeaderboard();
 }
@@ -61,6 +62,7 @@ async function startQuiz() {
 async function loadQuestions() {
   const res = await fetch("/get_questions");
   const questions = await res.json();
+  totalQuestions = questions.length;
 
   const quizForm = document.getElementById("quizForm");
   quizForm.innerHTML = "";
@@ -122,16 +124,17 @@ async function submitQuiz() {
 }
 
 async function loadLeaderboard() {
-  const res = await fetch("/leaderboard");
-  const html = await res.text();
+  const res = await fetch("/leaderboard_json");
+  const data = await res.json();
 
-  // extract table body from rendered leaderboard.html
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  const tbody = doc.querySelector("tbody");
-  if (tbody) {
-    document.getElementById("leaderboardBody").innerHTML = tbody.innerHTML;
-  }
+  const tbody = document.getElementById("leaderboardBody");
+  tbody.innerHTML = "";
+
+  data.forEach(r => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${r.student}</td><td>${r.score}</td><td>${r.total}</td><td>${r.timestamp ? new Date(r.timestamp).toLocaleString() : ''}</td>`;
+    tbody.appendChild(tr);
+  });
 }
 </script>
 </body>

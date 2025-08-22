@@ -168,9 +168,11 @@ def start_quiz():
             quiz_data = json.load(f)
             duration = quiz_data.get("duration", DEFAULT_QUIZ_DURATION)
             quiz_id = quiz_data.get("quiz_id")
+            total_questions = len(quiz_data.get("questions", []))
     else:
         duration = DEFAULT_QUIZ_DURATION
         quiz_id = "default"
+        total_questions = 0
 
     os.makedirs(os.path.dirname(RESULT_FILE), exist_ok=True)
     results = []
@@ -179,20 +181,20 @@ def start_quiz():
             results = json.load(f)
 
     student_record = next((r for r in results if r["student"] == student and r.get("quiz_id") == quiz_id), None)
-    if student_record:
-        start_time = student_record.get("start_time", datetime.now().isoformat())
-    else:
+    if not student_record:
         start_time = datetime.now().isoformat()
         results.append({
             "student": student,
             "quiz_id": quiz_id,
             "score": 0,
-            "total": len(quiz_data.get("questions", [])),
+            "total": total_questions,
             "start_time": start_time,
             "timestamp": None
         })
         with open(RESULT_FILE, "w") as f:
             json.dump(results, f, indent=4)
+    else:
+        start_time = student_record.get("start_time", datetime.now().isoformat())
 
     return jsonify({
         "start_time": start_time,
@@ -219,7 +221,7 @@ def submit_quiz():
     for i, q in enumerate(questions):
         correct_answer = q.get("answer", "").strip().lower()
         submitted_answer = student_answers[i].strip().lower() if i < len(student_answers) else ""
-        if correct_answer and correct_answer == submitted_answer:
+        if correct_answer == submitted_answer:
             score += 1
 
     total = len(questions)
@@ -255,27 +257,26 @@ def submit_quiz():
 
 @app.route('/leaderboard')
 def leaderboard():
+    results = []
     try:
         if os.path.exists(RESULT_FILE):
             with open(RESULT_FILE) as f:
                 results = json.load(f)
-        else:
-            results = []
-
-        # Ensure numeric score
+        # Normalize results
         for r in results:
             r["score"] = int(r.get("score", 0))
             r["total"] = int(r.get("total", 0))
-            r["timestamp"] = r.get("timestamp", "")
+            r["timestamp"] = r.get("timestamp") or ""
+            r["quiz_id"] = r.get("quiz_id") or "default"
 
-        # Show latest quiz leaderboard
         latest_quiz_id = results[-1]["quiz_id"] if results else None
         if latest_quiz_id:
             results = [r for r in results if r.get("quiz_id") == latest_quiz_id]
 
+        # Sort by score descending, then timestamp ascending
         results.sort(key=lambda x: (-x["score"], x["timestamp"]))
     except Exception as e:
-        print("Leaderboard load error:", e)
+        print("Leaderboard error:", e)
         results = []
 
     return render_template("leaderboard.html", results=results)
