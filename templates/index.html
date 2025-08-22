@@ -1,115 +1,112 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quiz Question Creator</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- SweetAlert2 -->
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <!-- jsPDF for PDF export -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <meta charset="UTF-8">
+  <title>Quiz Creator</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .question { margin: 15px 0; padding: 10px; border: 1px solid #ddd; border-radius: 8px; }
+    .option { display: block; margin: 5px 0; }
+    textarea { width: 100%; padding: 8px; margin-top: 10px; }
+    button { margin-top: 10px; padding: 8px 12px; border: none; border-radius: 5px; cursor: pointer; }
+    .save { background: #28a745; color: white; }
+    .ai-generate { background: #007bff; color: white; }
+  </style>
 </head>
-<body class="bg-gray-100 p-5">
-    <div class="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-lg">
-        <h1 class="text-3xl font-bold text-center mb-6 text-blue-600">Quiz Question Creator</h1>
+<body>
+  <h2>Teacher – Quiz Creator</h2>
 
-        <!-- Timer Input -->
-        <div class="mb-5">
-            <label for="quizDuration" class="block mb-2 font-semibold">Set Quiz Duration (minutes):</label>
-            <input type="number" id="quizDuration" value="5" min="1" max="180"
-                   class="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
-        </div>
+  <!-- AI Quiz Generator -->
+  <h3>Generate Quiz with AI</h3>
+  <textarea id="aiPrompt" placeholder="Enter topic or paste a paragraph..."></textarea>
+  <button class="ai-generate" onclick="generateQuiz()">Generate Quiz with AI</button>
 
-        <div class="space-y-3 mb-5">
-            <input type="text" id="question" placeholder="Enter your question"
-                   class="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
-            <input type="text" class="option w-full p-3 border rounded-lg" placeholder="Option A">
-            <input type="text" class="option w-full p-3 border rounded-lg" placeholder="Option B">
-            <input type="text" class="option w-full p-3 border rounded-lg" placeholder="Option C">
-            <input type="text" class="option w-full p-3 border rounded-lg" placeholder="Option D">
-            <input type="text" id="answer" placeholder="Correct Answer"
-                   class="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400">
-            <button id="addQuestion" class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
-                Add Question
-            </button>
-        </div>
+  <div id="aiStatus"></div>
+  <hr>
 
-        <h2 class="text-2xl font-semibold mb-3">Questions Added:</h2>
-        <ul id="questionList" class="list-disc list-inside mb-5"></ul>
+  <!-- Manual Quiz Builder -->
+  <h3>Build Quiz Manually</h3>
+  <div id="questions"></div>
+  <button onclick="addQuestion()">Add Question</button>
+  <br><br>
+  <label>Duration (minutes):</label>
+  <input type="number" id="duration" value="5" min="1" />
+  <br>
+  <button class="save" onclick="saveQuiz()">Save Quiz</button>
 
-        <button id="saveQuiz" class="w-full bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">
-            Save Quiz
-        </button>
+  <script>
+    let questionsDiv = document.getElementById("questions");
 
-        <!-- Export Buttons -->
-        <div class="mt-4 space-x-2">
-            <button id="exportCSV" class="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg">
-                Export as CSV
-            </button>
-            <button id="exportPDF" class="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg">
-                Export as PDF
-            </button>
-        </div>
-    </div>
+    function addQuestion(q = null) {
+      const div = document.createElement("div");
+      div.className = "question";
+      div.innerHTML = `
+        <label>Question:</label><br>
+        <input type="text" class="qText" value="${q ? q.question : ""}" style="width: 100%"><br>
+        <label>Options:</label><br>
+        <input type="text" class="opt" value="${q ? q.options[0] : ""}"><br>
+        <input type="text" class="opt" value="${q ? q.options[1] : ""}"><br>
+        <input type="text" class="opt" value="${q ? q.options[2] : ""}"><br>
+        <input type="text" class="opt" value="${q ? q.options[3] : ""}"><br>
+        <label>Answer:</label>
+        <input type="text" class="ans" value="${q ? q.answer : ""}">
+      `;
+      questionsDiv.appendChild(div);
+    }
 
-    <!-- Custom JS -->
-    <script>
-        let questions = [];
+    async function saveQuiz() {
+      const questions = [];
+      document.querySelectorAll(".question").forEach(div => {
+        let qText = div.querySelector(".qText").value;
+        let options = Array.from(div.querySelectorAll(".opt")).map(i => i.value);
+        let ans = div.querySelector(".ans").value;
+        questions.push({ question: qText, options: options, answer: ans });
+      });
+      let duration = parseInt(document.getElementById("duration").value) || 5;
 
-        document.getElementById('addQuestion').addEventListener('click', () => {
-            const questionText = document.getElementById('question').value.trim();
-            const options = Array.from(document.querySelectorAll('.option')).map(o => o.value.trim());
-            const answer = document.getElementById('answer').value.trim();
+      const res = await fetch("/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questions: questions, duration: duration })
+      });
+      const data = await res.json();
+      alert(data.message);
+    }
 
-            if (!questionText || options.some(o => !o) || !answer) {
-                Swal.fire('Error', 'Please fill in all fields', 'error');
-                return;
-            }
+    async function generateQuiz() {
+      const prompt = document.getElementById("aiPrompt").value.trim();
+      if (!prompt) {
+        alert("Please enter a topic or paragraph!");
+        return;
+      }
 
-            questions.push({ question: questionText, options: options, answer: answer });
+      document.getElementById("aiStatus").innerText = "Generating quiz... please wait ⏳";
 
-            // Update question list
-            const list = document.getElementById('questionList');
-            const li = document.createElement('li');
-            li.textContent = questionText;
-            list.appendChild(li);
-
-            // Clear input fields
-            document.getElementById('question').value = '';
-            document.querySelectorAll('.option').forEach(o => o.value = '');
-            document.getElementById('answer').value = '';
+      try {
+        const res = await fetch("/generate_quiz", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: prompt })
         });
+        const data = await res.json();
 
-        document.getElementById('saveQuiz').addEventListener('click', () => {
-            const duration = parseInt(document.getElementById('quizDuration').value);
-            if (questions.length === 0) {
-                Swal.fire('Error', 'Add at least one question', 'error');
-                return;
-            }
-            if (isNaN(duration) || duration < 1) {
-                Swal.fire('Error', 'Please enter a valid duration', 'error');
-                return;
-            }
+        if (data.error) {
+          document.getElementById("aiStatus").innerText = "Error: " + data.error;
+          return;
+        }
 
-            fetch('/save', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ questions: questions, duration: duration })
-            })
-            .then(res => res.json())
-            .then(data => {
-                Swal.fire('Success', data.message, 'success');
-                questions = [];
-                document.getElementById('questionList').innerHTML = '';
-            })
-            .catch(err => Swal.fire('Error', 'Failed to save quiz', 'error'));
-        });
+        document.getElementById("aiStatus").innerText = "Quiz generated ✅";
 
-        // Optional: implement exportCSV and exportPDF here
-    </script>
+        // Clear previous questions
+        questionsDiv.innerHTML = "";
+
+        // Add generated questions
+        data.quiz.forEach(q => addQuestion(q));
+
+      } catch (err) {
+        document.getElementById("aiStatus").innerText = "Error generating quiz.";
+      }
+    }
+  </script>
 </body>
 </html>

@@ -1,3 +1,4 @@
+import openai
 from flask import Flask, render_template, request, jsonify
 import json
 import os
@@ -6,6 +7,9 @@ from datetime import datetime
 import uuid  # for unique quiz IDs
 
 app = Flask(__name__)
+
+# Load OpenAI API key from environment variable (set this in Render)
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 DATA_FILE = 'data/quizzes.json'
 RESULT_FILE = 'data/results.json'
@@ -45,6 +49,37 @@ def save_quiz():
         json.dump(quiz_data, f, indent=4)
 
     return jsonify({'status': 'success', 'message': 'Quiz saved successfully!', 'quiz_id': quiz_id})
+
+# --------------------------
+# AI Quiz Generator
+# --------------------------
+@app.route('/generate_quiz', methods=['POST'])
+def generate_quiz():
+    data = request.json
+    prompt = data.get("prompt", "")
+
+    if not prompt.strip():
+        return jsonify({"error": "Prompt is required"}), 400
+
+    try:
+        response = openai.chat.completions.create(
+            model="gpt-4o-mini",   # lightweight + cheap model
+            messages=[
+                {"role": "system", "content": "You are a quiz generator AI. Generate 5 MCQs in JSON format."},
+                {"role": "user", "content": f"Generate 5 multiple-choice questions with 4 options and 1 correct answer. Topic/Paragraph: {prompt}"}
+            ],
+            temperature=0.7
+        )
+
+        quiz_json = response.choices[0].message.content
+
+        # Try parsing JSON
+        quiz_data = json.loads(quiz_json)
+
+        return jsonify({"quiz": quiz_data})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # --------------------------
 # Student (take quiz)
