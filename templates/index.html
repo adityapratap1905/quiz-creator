@@ -1,141 +1,142 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Take Quiz</title>
-  <link rel="stylesheet" href="/static/css/style.css">
+  <title>Quiz Creator Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
     .question { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
-    .question p { font-weight: bold; }
-    .options label { display: block; margin-top: 5px; cursor: pointer; }
-    #timer { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
-    #leaderboard { margin-top: 20px; }
-    #leaderboard table { width: 100%; border-collapse: collapse; }
-    #leaderboard th, #leaderboard td { border: 1px solid #ccc; padding: 5px; text-align: center; }
+    .question label { display: block; margin-top: 5px; font-weight: bold; }
+    .opt, .qText, .ans { width: 95%; margin-top: 3px; padding: 5px; }
+    .ai-actions label, .duration label { margin-left: 5px; font-weight: bold; }
   </style>
 </head>
 <body>
-  <h2>Take Quiz</h2>
+  <div class="container">
+    <h2>Teacher – Quiz Creator</h2>
 
-  <div>
-    <label>Your Name: <input type="text" id="studentName"></label>
-    <button onclick="startQuiz()">Start Quiz</button>
+    <!-- AI Quiz Generator -->
+    <div class="section">
+      <h3>Generate Quiz with AI</h3>
+      <textarea id="aiPrompt" placeholder="Enter topic or paste a paragraph..." rows="4" style="width:100%;"></textarea>
+      <div class="ai-actions" style="margin-top:10px;">
+        <select id="aiChoice">
+          <option value="openai">OpenAI GPT</option>
+          <option value="gemini">Google Gemini</option>
+        </select>
+        <label>Number of Questions:</label>
+        <input type="number" id="numQuestions" value="5" min="1" max="50">
+        <button class="btn ai-generate" onclick="generateQuiz()">Generate Quiz</button>
+      </div>
+      <div id="aiStatus" class="status" style="margin-top:5px;color:green;"></div>
+    </div>
+
+    <hr>
+
+    <!-- Manual Quiz Builder -->
+    <div class="section">
+      <h3>Build Quiz Manually</h3>
+      <div id="questions"></div>
+      <button class="btn add-q" onclick="addQuestion()">Add Question</button>
+      <div class="duration" style="margin-top:10px;">
+        <label>Duration (minutes):</label>
+        <input type="number" id="duration" value="5" min="1">
+      </div>
+      <button class="btn save" onclick="saveQuiz()" style="margin-top:10px;">Save Quiz</button>
+    </div>
   </div>
 
-  <div id="timer"></div>
-  <form id="quizForm"></form>
-  <button onclick="submitQuiz()">Submit Quiz</button>
+  <script>
+    const questionsDiv = document.getElementById("questions");
 
-  <div id="leaderboard">
-    <h3>Leaderboard</h3>
-    <table>
-      <thead>
-        <tr><th>Student</th><th>Score</th><th>Total</th><th>Time</th></tr>
-      </thead>
-      <tbody id="leaderboardBody"></tbody>
-    </table>
-  </div>
-
-<script>
-let quizId = null;
-let timerInterval;
-let totalQuestions = 0;
-
-async function startQuiz() {
-  const studentName = document.getElementById("studentName").value.trim();
-  if (!studentName) { alert("Enter your name!"); return; }
-
-  const res = await fetch("/start_quiz", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ student: studentName })
-  });
-  const data = await res.json();
-  quizId = data.quiz_id;
-
-  await loadQuestions();
-  startTimer(data.duration);
-  loadLeaderboard();
-}
-
-async function loadQuestions() {
-  const res = await fetch("/get_questions");
-  const questions = await res.json();
-  totalQuestions = questions.length;
-
-  const quizForm = document.getElementById("quizForm");
-  quizForm.innerHTML = "";
-
-  questions.forEach((q, idx) => {
-    const div = document.createElement("div");
-    div.className = "question";
-    div.dataset.index = idx;
-
-    let html = `<p>${idx + 1}. ${q.question}</p><div class="options">`;
-    q.options.forEach(opt => {
-      html += `<label><input type="radio" name="q${idx}" value="${opt}"> ${opt}</label>`;
-    });
-    html += `</div>`;
-    div.innerHTML = html;
-    quizForm.appendChild(div);
-  });
-}
-
-function startTimer(duration) {
-  let time = duration;
-  const timerEl = document.getElementById("timer");
-
-  clearInterval(timerInterval);
-  timerInterval = setInterval(() => {
-    const minutes = Math.floor(time / 60);
-    const seconds = time % 60;
-    timerEl.textContent = `Time Left: ${minutes}:${seconds < 10 ? '0'+seconds : seconds}`;
-    time--;
-
-    if (time < 0) {
-      clearInterval(timerInterval);
-      alert("Time's up! Submitting quiz...");
-      submitQuiz();
+    function escapeHTML(text) {
+      return text.replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
     }
-  }, 1000);
-}
 
-async function submitQuiz() {
-  clearInterval(timerInterval);
+    function addQuestion(q = null) {
+      const div = document.createElement("div");
+      div.className = "question";
 
-  const studentName = document.getElementById("studentName").value.trim();
-  const answers = [];
+      const options = q && Array.isArray(q.options) ? q.options : ["", "", "", ""];
+      const questionText = q && q.question ? q.question : "";
+      const answerText = q && q.answer ? q.answer : "";
 
-  document.querySelectorAll(".question").forEach((qDiv, idx) => {
-    const selected = qDiv.querySelector(`input[name="q${idx}"]:checked`);
-    answers.push(selected ? selected.value.trim() : "");
-  });
+      div.innerHTML = `
+        <label>Question:</label>
+        <input type="text" class="qText" value="${escapeHTML(questionText)}">
+        <label>Options:</label>
+        <input type="text" class="opt" value="${escapeHTML(options[0])}">
+        <input type="text" class="opt" value="${escapeHTML(options[1])}">
+        <input type="text" class="opt" value="${escapeHTML(options[2])}">
+        <input type="text" class="opt" value="${escapeHTML(options[3])}">
+        <label>Answer:</label>
+        <input type="text" class="ans" value="${escapeHTML(answerText)}">
+      `;
+      questionsDiv.appendChild(div);
+    }
 
-  const res = await fetch("/submit_quiz", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ student: studentName, quiz_id: quizId, answers })
-  });
+    async function saveQuiz() {
+      const questions = [];
+      document.querySelectorAll(".question").forEach(div => {
+        const qText = div.querySelector(".qText").value.trim();
+        const options = Array.from(div.querySelectorAll(".opt")).map(i => i.value.trim());
+        const ans = div.querySelector(".ans").value.trim();
+        if (qText) questions.push({ question: qText, options, answer: ans });
+      });
 
-  const data = await res.json();
-  alert(`You scored ${data.score} out of ${data.total}`);
-  loadLeaderboard();
-}
+      const duration = parseInt(document.getElementById("duration").value) || 5;
 
-async function loadLeaderboard() {
-  const res = await fetch("/leaderboard_json");
-  const data = await res.json();
+      try {
+        const res = await fetch("/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ questions, duration })
+        });
+        const data = await res.json();
+        alert(data.message);
+      } catch (err) {
+        alert("Error saving quiz.");
+      }
+    }
 
-  const tbody = document.getElementById("leaderboardBody");
-  tbody.innerHTML = "";
+    async function generateQuiz() {
+      const prompt = document.getElementById("aiPrompt").value.trim();
+      const aiChoice = document.getElementById("aiChoice").value;
+      const numQuestions = parseInt(document.getElementById("numQuestions").value) || 5;
 
-  data.forEach(r => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${r.student}</td><td>${r.score}</td><td>${r.total}</td><td>${r.timestamp ? new Date(r.timestamp).toLocaleString() : ''}</td>`;
-    tbody.appendChild(tr);
-  });
-}
-</script>
+      if (!prompt) {
+        alert("Please enter a topic or paragraph!");
+        return;
+      }
+
+      document.getElementById("aiStatus").innerText = "Generating quiz... ⏳";
+
+      try {
+        const res = await fetch("/generate_quiz", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt, ai_choice: aiChoice, num_questions: numQuestions })
+        });
+
+        const data = await res.json();
+        if (data.error) {
+          document.getElementById("aiStatus").innerText = "Error: " + data.error;
+          return;
+        }
+
+        document.getElementById("aiStatus").innerText = "Quiz generated ✅";
+
+        questionsDiv.innerHTML = "";
+        data.quiz.forEach(q => addQuestion(q));
+      } catch (err) {
+        document.getElementById("aiStatus").innerText = "Error generating quiz.";
+      }
+    }
+  </script>
 </body>
 </html>
