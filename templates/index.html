@@ -2,37 +2,41 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Quiz Creator</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    .question { margin: 15px 0; padding: 10px; border: 1px solid #ddd; border-radius: 8px; }
-    .option { display: block; margin: 5px 0; }
-    textarea { width: 100%; padding: 8px; margin-top: 10px; }
-    button { margin-top: 10px; padding: 8px 12px; border: none; border-radius: 5px; cursor: pointer; }
-    .save { background: #28a745; color: white; }
-    .ai-generate { background: #007bff; color: white; }
-  </style>
+  <title>Quiz Creator Dashboard</title>
+  <link rel="stylesheet" href="static/css/style.css">
 </head>
 <body>
-  <h2>Teacher – Quiz Creator</h2>
+  <div class="container">
+    <h2>Teacher – Quiz Creator</h2>
 
-  <!-- AI Quiz Generator -->
-  <h3>Generate Quiz with AI</h3>
-  <textarea id="aiPrompt" placeholder="Enter topic or paste a paragraph..."></textarea>
-  <button class="ai-generate" onclick="generateQuiz()">Generate Quiz with AI</button>
+    <!-- AI Quiz Generator -->
+    <div class="section">
+      <h3>Generate Quiz with AI</h3>
+      <textarea id="aiPrompt" placeholder="Enter topic or paste a paragraph..."></textarea>
+      <div class="ai-actions">
+        <select id="aiChoice">
+          <option value="openai">OpenAI GPT</option>
+          <option value="gemini">Google Gemini</option>
+        </select>
+        <button class="btn ai-generate" onclick="generateQuiz()">Generate Quiz</button>
+      </div>
+      <div id="aiStatus" class="status"></div>
+    </div>
 
-  <div id="aiStatus"></div>
-  <hr>
+    <hr>
 
-  <!-- Manual Quiz Builder -->
-  <h3>Build Quiz Manually</h3>
-  <div id="questions"></div>
-  <button onclick="addQuestion()">Add Question</button>
-  <br><br>
-  <label>Duration (minutes):</label>
-  <input type="number" id="duration" value="5" min="1" />
-  <br>
-  <button class="save" onclick="saveQuiz()">Save Quiz</button>
+    <!-- Manual Quiz Builder -->
+    <div class="section">
+      <h3>Build Quiz Manually</h3>
+      <div id="questions"></div>
+      <button class="btn add-q" onclick="addQuestion()">Add Question</button>
+      <div class="duration">
+        <label>Duration (minutes):</label>
+        <input type="number" id="duration" value="5" min="1">
+      </div>
+      <button class="btn save" onclick="saveQuiz()">Save Quiz</button>
+    </div>
+  </div>
 
   <script>
     let questionsDiv = document.getElementById("questions");
@@ -41,13 +45,13 @@
       const div = document.createElement("div");
       div.className = "question";
       div.innerHTML = `
-        <label>Question:</label><br>
-        <input type="text" class="qText" value="${q ? q.question : ""}" style="width: 100%"><br>
-        <label>Options:</label><br>
-        <input type="text" class="opt" value="${q ? q.options[0] : ""}"><br>
-        <input type="text" class="opt" value="${q ? q.options[1] : ""}"><br>
-        <input type="text" class="opt" value="${q ? q.options[2] : ""}"><br>
-        <input type="text" class="opt" value="${q ? q.options[3] : ""}"><br>
+        <label>Question:</label>
+        <input type="text" class="qText" value="${q ? q.question : ""}">
+        <label>Options:</label>
+        <input type="text" class="opt" value="${q ? q.options[0] : ""}">
+        <input type="text" class="opt" value="${q ? q.options[1] : ""}">
+        <input type="text" class="opt" value="${q ? q.options[2] : ""}">
+        <input type="text" class="opt" value="${q ? q.options[3] : ""}">
         <label>Answer:</label>
         <input type="text" class="ans" value="${q ? q.answer : ""}">
       `;
@@ -75,18 +79,20 @@
 
     async function generateQuiz() {
       const prompt = document.getElementById("aiPrompt").value.trim();
+      const aiChoice = document.getElementById("aiChoice").value;
+
       if (!prompt) {
         alert("Please enter a topic or paragraph!");
         return;
       }
 
-      document.getElementById("aiStatus").innerText = "Generating quiz... please wait ⏳";
+      document.getElementById("aiStatus").innerText = "Generating quiz... ⏳";
 
       try {
         const res = await fetch("/generate_quiz", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: prompt })
+          body: JSON.stringify({ prompt: prompt, ai_choice: aiChoice })
         });
         const data = await res.json();
 
@@ -97,10 +103,7 @@
 
         document.getElementById("aiStatus").innerText = "Quiz generated ✅";
 
-        // Clear previous questions
         questionsDiv.innerHTML = "";
-
-        // Add generated questions
         data.quiz.forEach(q => addQuestion(q));
 
       } catch (err) {

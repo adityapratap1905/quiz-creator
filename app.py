@@ -1,4 +1,3 @@
-from openai import OpenAI
 from flask import Flask, render_template, request, jsonify
 import json
 import os
@@ -6,10 +5,17 @@ import random
 from datetime import datetime
 import uuid  # for unique quiz IDs
 
+# AI clients
+from openai import OpenAI
+import google.generativeai as genai
+
 app = Flask(__name__)
 
-# Create OpenAI client (reads key from environment)
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# --------------------------
+# Configure API keys
+# --------------------------
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 DATA_FILE = 'data/quizzes.json'
 RESULT_FILE = 'data/results.json'
@@ -20,7 +26,7 @@ DEFAULT_QUIZ_DURATION = 300  # default 5 minutes in seconds
 # --------------------------
 @app.route('/')
 def login():
-    return render_template('login.html')   # login page
+    return render_template('login.html')
 
 # --------------------------
 # Teacher (quiz creator)
@@ -51,35 +57,49 @@ def save_quiz():
     return jsonify({'status': 'success', 'message': 'Quiz saved successfully!', 'quiz_id': quiz_id})
 
 # --------------------------
-# AI Quiz Generator
+# AI Quiz Generator (OpenAI + Gemini fallback)
 # --------------------------
 @app.route('/generate_quiz', methods=['POST'])
 def generate_quiz():
     data = request.json
-    prompt = data.get("prompt", "")
+    prompt = data.get("prompt", "").strip()
+    ai_choice = data.get("ai_choice", "openai")  # default to OpenAI
 
-    if not prompt.strip():
+    if not prompt:
         return jsonify({"error": "Prompt is required"}), 400
 
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",   # lightweight + cheap model
-            messages=[
-                {"role": "system", "content": "You are a quiz generator AI. Generate 5 MCQs in JSON format."},
-                {"role": "user", "content": f"Generate 5 multiple-choice questions with 4 options and 1 correct answer. Topic/Paragraph: {prompt}"}
-            ],
-            temperature=0.7
-        )
+    quiz = None
+    error_msg = None
 
-        quiz_json = response.choices[0].message.content
+    # Try OpenAI if selected
+    if ai_choice.lower() == "openai":
+        try:
+            response = openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a quiz generator AI."},
+                    {"role": "user", "content": f"Generate 5 MCQs with 4 options and correct answers based on: {prompt}"}
+                ],
+                temperature=0.7
+            )
+            quiz = response.choices[0].message.content
 
-        # Try parsing JSON
-        quiz_data = json.loads(quiz_json)
+        except Exception as e:
+            error_msg = str(e)
 
-        return jsonify({"quiz": quiz_data})
+    # Fallback to Gemini if OpenAI fails or user chose Gemini
+    if ai_choice.lower() == "gemini" or (quiz is None and error_msg):
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            gemini_response = model.generate_content(
+                f"Generate 5 multiple-choice questions with 4 options and correct answers based on: {prompt}"
+            )
+            quiz = gemini_response.text
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        except Exception as e:
+            return jsonify({"error": f"Both AI failed. Gemini error: {str(e)}"}), 500
+
+    return jsonify({"quiz": quiz})
 
 # --------------------------
 # Student (take quiz)
@@ -189,7 +209,6 @@ def submit_quiz():
         with open(RESULT_FILE) as f:
             results = json.load(f)
 
-    # Update or add student record
     updated = False
     for r in results:
         if r["student"] == student and r.get("quiz_id") == quiz_id:
@@ -224,17 +243,14 @@ def leaderboard():
         else:
             results = []
 
-        # Ensure all fields exist
         for r in results:
             r["score"] = r.get("score") or 0
             r["total"] = r.get("total") or "?"
             r["timestamp"] = r.get("timestamp") or ""
             r["quiz_id"] = r.get("quiz_id") or "default"
 
-        # Show leaderboard for latest quiz only
-        latest_quiz_id = None
-        if results:
-            latest_quiz_id = results[-1]["quiz_id"]
+        latest_quiz_id = results[-1]["quiz_id"] if results else None
+        if latest_quiz_id:
             results = [r for r in results if r.get("quiz_id") == latest_quiz_id]
 
         results.sort(key=lambda x: (-x["score"], x["timestamp"]))
@@ -245,5 +261,8 @@ def leaderboard():
 
     return render_template("leaderboard.html", results=results)
 
+# --------------------------
+# Run app
+# --------------------------
 if __name__ == '__main__':
     app.run(debug=True)
