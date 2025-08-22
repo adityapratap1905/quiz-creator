@@ -18,6 +18,8 @@
           <option value="openai">OpenAI GPT</option>
           <option value="gemini">Google Gemini</option>
         </select>
+        <label>Number of Questions:</label>
+        <input type="number" id="numQuestions" value="5" min="1" max="50">
         <button class="btn ai-generate" onclick="generateQuiz()">Generate Quiz</button>
       </div>
       <div id="aiStatus" class="status"></div>
@@ -44,16 +46,21 @@
     function addQuestion(q = null) {
       const div = document.createElement("div");
       div.className = "question";
+
+      const options = q && Array.isArray(q.options) ? q.options : ["", "", "", ""];
+      const questionText = q && q.question ? q.question : "";
+      const answerText = q && q.answer ? q.answer : "";
+
       div.innerHTML = `
         <label>Question:</label>
-        <input type="text" class="qText" value="${q ? q.question : ""}">
+        <input type="text" class="qText" value="${questionText}">
         <label>Options:</label>
-        <input type="text" class="opt" value="${q ? q.options[0] : ""}">
-        <input type="text" class="opt" value="${q ? q.options[1] : ""}">
-        <input type="text" class="opt" value="${q ? q.options[2] : ""}">
-        <input type="text" class="opt" value="${q ? q.options[3] : ""}">
+        <input type="text" class="opt" value="${options[0]}">
+        <input type="text" class="opt" value="${options[1]}">
+        <input type="text" class="opt" value="${options[2]}">
+        <input type="text" class="opt" value="${options[3]}">
         <label>Answer:</label>
-        <input type="text" class="ans" value="${q ? q.answer : ""}">
+        <input type="text" class="ans" value="${answerText}">
       `;
       questionsDiv.appendChild(div);
     }
@@ -61,25 +68,33 @@
     async function saveQuiz() {
       const questions = [];
       document.querySelectorAll(".question").forEach(div => {
-        let qText = div.querySelector(".qText").value;
-        let options = Array.from(div.querySelectorAll(".opt")).map(i => i.value);
-        let ans = div.querySelector(".ans").value;
-        questions.push({ question: qText, options: options, answer: ans });
+        const qText = div.querySelector(".qText").value.trim();
+        const options = Array.from(div.querySelectorAll(".opt")).map(i => i.value.trim());
+        const ans = div.querySelector(".ans").value.trim();
+        if (qText) {
+          questions.push({ question: qText, options: options, answer: ans });
+        }
       });
-      let duration = parseInt(document.getElementById("duration").value) || 5;
 
-      const res = await fetch("/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questions: questions, duration: duration })
-      });
-      const data = await res.json();
-      alert(data.message);
+      const duration = parseInt(document.getElementById("duration").value) || 5;
+
+      try {
+        const res = await fetch("/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ questions: questions, duration: duration })
+        });
+        const data = await res.json();
+        alert(data.message);
+      } catch (err) {
+        alert("Error saving quiz.");
+      }
     }
 
     async function generateQuiz() {
       const prompt = document.getElementById("aiPrompt").value.trim();
       const aiChoice = document.getElementById("aiChoice").value;
+      const numQuestions = parseInt(document.getElementById("numQuestions").value) || 5;
 
       if (!prompt) {
         alert("Please enter a topic or paragraph!");
@@ -92,7 +107,7 @@
         const res = await fetch("/generate_quiz", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: prompt, ai_choice: aiChoice })
+          body: JSON.stringify({ prompt: prompt, ai_choice: aiChoice, num_questions: numQuestions })
         });
         const data = await res.json();
 

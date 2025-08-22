@@ -57,13 +57,14 @@ def save_quiz():
     return jsonify({'status': 'success', 'message': 'Quiz saved successfully!', 'quiz_id': quiz_id})
 
 # --------------------------
-# AI Quiz Generator (OpenAI + Gemini fallback)
+# AI Quiz Generator
 # --------------------------
 @app.route('/generate_quiz', methods=['POST'])
 def generate_quiz():
     data = request.json
     prompt = data.get("prompt", "").strip()
-    ai_choice = data.get("ai_choice", "openai")  # default to OpenAI
+    ai_choice = data.get("ai_choice", "openai")
+    num_questions = int(data.get("num_questions", 5))  # how many questions to generate
 
     if not prompt:
         return jsonify({"error": "Prompt is required"}), 400
@@ -71,46 +72,58 @@ def generate_quiz():
     quiz_text = None
     error_msg = None
 
-    # Try OpenAI if selected
+    json_instruction = f"""
+Generate {num_questions} multiple-choice questions based on the topic/paragraph: {prompt}.
+Output strictly in this JSON format:
+
+[
+  {{
+    "question": "Question text",
+    "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+    "answer": "Correct Option"
+  }}
+]
+"""
+
+    # OpenAI
     if ai_choice.lower() == "openai":
         try:
             response = openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are a quiz generator AI."},
-                    {"role": "user", "content": f"Generate 5 multiple-choice questions in JSON format with 4 options and 1 correct answer based on: {prompt}"}
+                    {"role": "user", "content": json_instruction}
                 ],
                 temperature=0.7
             )
             quiz_text = response.choices[0].message.content
-
         except Exception as e:
             error_msg = str(e)
 
-    # Fallback to Gemini if OpenAI fails or user chose Gemini
+    # Gemini fallback
     if ai_choice.lower() == "gemini" or (quiz_text is None and error_msg):
         try:
             model = genai.GenerativeModel("gemini-1.5-flash")
-            gemini_response = model.generate_content(
-                f"Generate 5 multiple-choice questions in JSON format with 4 options and 1 correct answer based on: {prompt}"
-            )
+            gemini_response = model.generate_content(json_instruction)
             quiz_text = gemini_response.text
-
         except Exception as e:
             return jsonify({"error": f"Both AI failed. Gemini error: {str(e)}"}), 500
 
-    # Parse AI output into JSON safely
+    # Safely parse JSON
     try:
         quiz_data = json.loads(quiz_text)
-        if not isinstance(quiz_data, list):
-            quiz_data = [{"question": quiz_text, "options": [], "answer": ""}]
-    except json.JSONDecodeError:
-        quiz_data = [{"question": quiz_text, "options": [], "answer": ""}]
+        # Ensure each question has required fields
+        for q in quiz_data:
+            q.setdefault("question", "")
+            q.setdefault("options", ["", "", "", ""])
+            q.setdefault("answer", "")
+    except (json.JSONDecodeError, TypeError):
+        quiz_data = [{"question": quiz_text or "", "options": ["", "", "", ""], "answer": ""}]
 
     return jsonify({"quiz": quiz_data})
 
 # --------------------------
-# Student (take quiz)
+# Student routes
 # --------------------------
 @app.route('/take_quiz')
 def take_quiz():
@@ -128,9 +141,6 @@ def get_questions():
     random.shuffle(questions)
     return jsonify(questions)
 
-# --------------------------
-# Timer API
-# --------------------------
 @app.route('/get_timer')
 def get_timer():
     if os.path.exists(DATA_FILE):
@@ -142,9 +152,6 @@ def get_timer():
 
     return jsonify({"duration": duration})
 
-# --------------------------
-# Start quiz
-# --------------------------
 @app.route('/start_quiz', methods=['POST'])
 def start_quiz():
     data = request.json
@@ -189,9 +196,6 @@ def start_quiz():
         "quiz_id": quiz_id
     })
 
-# --------------------------
-# Submit quiz
-# --------------------------
 @app.route('/submit_quiz', methods=['POST'])
 def submit_quiz():
     data = request.json
@@ -239,9 +243,6 @@ def submit_quiz():
 
     return jsonify({"score": score, "total": total})
 
-# --------------------------
-# Leaderboard
-# --------------------------
 @app.route('/leaderboard')
 def leaderboard():
     try:
@@ -262,7 +263,6 @@ def leaderboard():
             results = [r for r in results if r.get("quiz_id") == latest_quiz_id]
 
         results.sort(key=lambda x: (-x["score"], x["timestamp"]))
-
     except Exception as e:
         print("Leaderboard load error:", e)
         results = []
