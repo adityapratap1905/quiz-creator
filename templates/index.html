@@ -1,142 +1,62 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Quiz Creator Dashboard</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  <style>
-    .question { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
-    .question label { display: block; margin-top: 5px; font-weight: bold; }
-    .opt, .qText, .ans { width: 95%; margin-top: 3px; padding: 5px; }
-    .ai-actions label, .duration label { margin-left: 5px; font-weight: bold; }
-  </style>
+<meta charset="UTF-8">
+<title>Take Quiz</title>
+<style>
+  body{font-family: Arial;}
+  .question{border:1px solid #ccc; margin:10px; padding:10px;}
+  .option{display:block; margin:5px 0;}
+</style>
 </head>
 <body>
-  <div class="container">
-    <h2>Teacher – Quiz Creator</h2>
+<h2>Quiz</h2>
+<div id="timer" style="font-weight:bold;"></div>
+<form id="quizForm">
+  <div id="questions"></div>
+  <button type="submit">Submit Quiz</button>
+</form>
 
-    <!-- AI Quiz Generator -->
-    <div class="section">
-      <h3>Generate Quiz with AI</h3>
-      <textarea id="aiPrompt" placeholder="Enter topic or paste a paragraph..." rows="4" style="width:100%;"></textarea>
-      <div class="ai-actions" style="margin-top:10px;">
-        <select id="aiChoice">
-          <option value="openai">OpenAI GPT</option>
-          <option value="gemini">Google Gemini</option>
-        </select>
-        <label>Number of Questions:</label>
-        <input type="number" id="numQuestions" value="5" min="1" max="50">
-        <button class="btn ai-generate" onclick="generateQuiz()">Generate Quiz</button>
-      </div>
-      <div id="aiStatus" class="status" style="margin-top:5px;color:green;"></div>
-    </div>
+<script>
+let quizId="", studentName="Student";
 
-    <hr>
+async function loadQuiz(){
+    const res = await fetch("/get_questions");
+    const questions = await res.json();
+    const container = document.getElementById("questions");
+    questions.forEach((q,i)=>{
+        const div=document.createElement("div");
+        div.className="question";
+        div.innerHTML=`<p>${q.question}</p>`+
+                      q.options.map(opt=>`<label class="option"><input type="radio" name="q${i}" value="${opt}"> ${opt}</label>`).join('');
+        container.appendChild(div);
+    });
+    quizId = (await fetch("/start_quiz", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({student:studentName})
+    }).then(r=>r.json())).quiz_id;
+}
 
-    <!-- Manual Quiz Builder -->
-    <div class="section">
-      <h3>Build Quiz Manually</h3>
-      <div id="questions"></div>
-      <button class="btn add-q" onclick="addQuestion()">Add Question</button>
-      <div class="duration" style="margin-top:10px;">
-        <label>Duration (minutes):</label>
-        <input type="number" id="duration" value="5" min="1">
-      </div>
-      <button class="btn save" onclick="saveQuiz()" style="margin-top:10px;">Save Quiz</button>
-    </div>
-  </div>
+async function submitQuiz(e){
+    e.preventDefault();
+    const answers=[];
+    document.querySelectorAll(".question").forEach((q,i)=>{
+        const checked=q.querySelector("input[type=radio]:checked");
+        answers.push(checked ? checked.value : "");
+    });
+    const res = await fetch("/submit_quiz", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({student:studentName, quiz_id:quizId, answers})
+    });
+    const data=await res.json();
+    alert(`Your Score: ${data.score} / ${data.total}`);
+    window.location="/leaderboard";
+}
 
-  <script>
-    const questionsDiv = document.getElementById("questions");
-
-    function escapeHTML(text) {
-      return text.replace(/&/g, "&amp;")
-                 .replace(/</g, "&lt;")
-                 .replace(/>/g, "&gt;")
-                 .replace(/"/g, "&quot;")
-                 .replace(/'/g, "&#039;");
-    }
-
-    function addQuestion(q = null) {
-      const div = document.createElement("div");
-      div.className = "question";
-
-      const options = q && Array.isArray(q.options) ? q.options : ["", "", "", ""];
-      const questionText = q && q.question ? q.question : "";
-      const answerText = q && q.answer ? q.answer : "";
-
-      div.innerHTML = `
-        <label>Question:</label>
-        <input type="text" class="qText" value="${escapeHTML(questionText)}">
-        <label>Options:</label>
-        <input type="text" class="opt" value="${escapeHTML(options[0])}">
-        <input type="text" class="opt" value="${escapeHTML(options[1])}">
-        <input type="text" class="opt" value="${escapeHTML(options[2])}">
-        <input type="text" class="opt" value="${escapeHTML(options[3])}">
-        <label>Answer:</label>
-        <input type="text" class="ans" value="${escapeHTML(answerText)}">
-      `;
-      questionsDiv.appendChild(div);
-    }
-
-    async function saveQuiz() {
-      const questions = [];
-      document.querySelectorAll(".question").forEach(div => {
-        const qText = div.querySelector(".qText").value.trim();
-        const options = Array.from(div.querySelectorAll(".opt")).map(i => i.value.trim());
-        const ans = div.querySelector(".ans").value.trim();
-        if (qText) questions.push({ question: qText, options, answer: ans });
-      });
-
-      const duration = parseInt(document.getElementById("duration").value) || 5;
-
-      try {
-        const res = await fetch("/save", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ questions, duration })
-        });
-        const data = await res.json();
-        alert(data.message);
-      } catch (err) {
-        alert("Error saving quiz.");
-      }
-    }
-
-    async function generateQuiz() {
-      const prompt = document.getElementById("aiPrompt").value.trim();
-      const aiChoice = document.getElementById("aiChoice").value;
-      const numQuestions = parseInt(document.getElementById("numQuestions").value) || 5;
-
-      if (!prompt) {
-        alert("Please enter a topic or paragraph!");
-        return;
-      }
-
-      document.getElementById("aiStatus").innerText = "Generating quiz... ⏳";
-
-      try {
-        const res = await fetch("/generate_quiz", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt, ai_choice: aiChoice, num_questions: numQuestions })
-        });
-
-        const data = await res.json();
-        if (data.error) {
-          document.getElementById("aiStatus").innerText = "Error: " + data.error;
-          return;
-        }
-
-        document.getElementById("aiStatus").innerText = "Quiz generated ✅";
-
-        questionsDiv.innerHTML = "";
-        data.quiz.forEach(q => addQuestion(q));
-      } catch (err) {
-        document.getElementById("aiStatus").innerText = "Error generating quiz.";
-      }
-    }
-  </script>
+document.getElementById("quizForm").addEventListener("submit", submitQuiz);
+loadQuiz();
+</script>
 </body>
 </html>
