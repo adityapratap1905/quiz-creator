@@ -254,10 +254,14 @@ def submit_quiz():
     else:
         return jsonify({"error": "Quiz not found"}), 404
 
+    # normalize answers
+    def normalize(text):
+        return re.sub(r'\s+', ' ', text.strip().lower())
+
     score = 0
     for i, q in enumerate(questions):
-        correct_answer = q.get("answer", "").strip().lower()
-        submitted_answer = student_answers[i].strip().lower() if i < len(student_answers) else ""
+        correct_answer = normalize(q.get("answer", ""))
+        submitted_answer = normalize(student_answers[i]) if i < len(student_answers) else ""
         if correct_answer == submitted_answer:
             score += 1
 
@@ -316,7 +320,6 @@ def leaderboard():
         results = []
 
     return render_template("leaderboard.html", results=results)
-
 
 if __name__ == '__main__':
     app.run(debug=True)
