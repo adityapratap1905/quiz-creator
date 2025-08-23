@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
-import json, os, random, re, uuid
+import json, os, random, re, uuid, html
 from datetime import datetime
 from functools import wraps
 
@@ -254,9 +254,9 @@ def submit_quiz():
     else:
         return jsonify({"error": "Quiz not found"}), 404
 
-    # normalize answers
+    # normalize answers (strip, lowercase, decode HTML)
     def normalize(text):
-        return re.sub(r'\s+', ' ', text.strip().lower())
+        return html.unescape(text.strip().lower())
 
     score = 0
     for i, q in enumerate(questions):
@@ -281,6 +281,7 @@ def submit_quiz():
             r["timestamp"] = datetime.now().isoformat()
             updated = True
             break
+
     if not updated:
         results.append({
             "student": student,
