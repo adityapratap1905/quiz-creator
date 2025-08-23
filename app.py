@@ -8,19 +8,21 @@ from openai import OpenAI
 import google.generativeai as genai
 
 app = Flask(__name__)
-app.secret_key = "your_secret_key_here"
+app.secret_key = "your_secret_key_here"  # Required for session handling
 
-# API keys
+# --------------------------
+# Configure API keys
+# --------------------------
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 DATA_FILE = 'data/quizzes.json'
 RESULT_FILE = 'data/results.json'
-DEFAULT_QUIZ_DURATION = 300
-TEACHER_PASSWORD = "admin123"
+DEFAULT_QUIZ_DURATION = 300  # default 5 minutes
+TEACHER_PASSWORD = "admin123"  # password for teachers
 
 # --------------------------
-# Login
+# Login & Session Management
 # --------------------------
 def login_required(role=None):
     def decorator(f):
@@ -42,17 +44,22 @@ def login():
 def do_login():
     username = request.form.get("username", "").strip()
     role = request.form.get("role")
-    password = request.form.get("password", "").strip()
+    password = request.form.get("password", "").strip()  # get password
 
     if not username or role not in ("teacher", "student"):
         return redirect(url_for("login"))
 
+    # Check password for teacher
     if role == "teacher" and password != TEACHER_PASSWORD:
         return "Invalid password for teacher", 403
 
     session["username"] = username
     session["role"] = role
-    return redirect(url_for("creator") if role=="teacher" else url_for("take_quiz"))
+
+    if role == "teacher":
+        return redirect(url_for("creator"))
+    else:
+        return redirect(url_for("take_quiz"))
 
 @app.route('/logout')
 def logout():
@@ -60,7 +67,7 @@ def logout():
     return redirect(url_for("login"))
 
 # --------------------------
-# Teacher Routes
+# Teacher (Quiz Creator)
 # --------------------------
 @app.route('/creator')
 @login_required(role="teacher")
@@ -72,11 +79,16 @@ def creator():
 def save_quiz():
     data = request.json
     questions = data.get("questions", [])
-    duration_seconds = int(data.get("duration", 5)) * 60
+    duration_minutes = data.get("duration", 5)
+    duration_seconds = duration_minutes * 60
 
     os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
     quiz_id = str(uuid.uuid4())
-    quiz_data = {"quiz_id": quiz_id, "questions": questions, "duration": duration_seconds}
+    quiz_data = {
+        "quiz_id": quiz_id,
+        "questions": questions,
+        "duration": duration_seconds
+    }
 
     with open(DATA_FILE, 'w') as f:
         json.dump(quiz_data, f, indent=4)
@@ -95,10 +107,10 @@ def generate_quiz():
         return jsonify({"error": "Prompt is required"}), 400
 
     instruction = f"""
-Generate {num_questions} multiple-choice questions based on:
+Generate {num_questions} multiple-choice questions based on the following topic/paragraph:
 {prompt}
 
-Output strictly as JSON array:
+Output strictly as a JSON array with each question like this:
 [
   {{
     "question": "Question text",
@@ -109,8 +121,8 @@ Output strictly as JSON array:
 """
 
     quiz_text = None
-    try:
-        if ai_choice.lower() == "openai":
+    if ai_choice.lower() == "openai":
+        try:
             response = openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
@@ -120,21 +132,27 @@ Output strictly as JSON array:
                 temperature=0.7
             )
             quiz_text = response.choices[0].message.content
-        if ai_choice.lower() == "gemini" or not quiz_text:
+        except Exception:
+            quiz_text = None
+
+    if ai_choice.lower() == "gemini" or not quiz_text:
+        try:
             model = genai.GenerativeModel("gemini-1.5-flash")
-            quiz_text = model.generate_content(instruction).text
-    except Exception as e:
-        return jsonify({"error": f"AI generation failed: {str(e)}"}), 500
+            gemini_response = model.generate_content(instruction)
+            quiz_text = gemini_response.text
+        except Exception as e:
+            return jsonify({"error": f"Both AI failed: {str(e)}"}), 500
 
     try:
         match = re.search(r"\[.*\]", quiz_text, re.DOTALL)
         quiz_data = json.loads(match.group(0)) if match else []
-    except:
+    except Exception:
         quiz_data = []
 
     for q in quiz_data:
         q.setdefault("question", "")
-        q["options"] = (q.get("options", []) + ["", "", "", ""])[:4]
+        opts = q.get("options", [])
+        q["options"] = (opts + ["", "", "", ""])[:4]
         q.setdefault("answer", "")
 
     if not quiz_data:
@@ -155,9 +173,11 @@ def take_quiz():
 def get_questions():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'r') as f:
-            questions = json.load(f).get("questions", [])
+            quiz_data = json.load(f)
+            questions = quiz_data.get("questions", [])
     else:
         questions = []
+
     random.shuffle(questions)
     return jsonify(questions)
 
@@ -166,7 +186,8 @@ def get_questions():
 def get_timer():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'r') as f:
-            duration = json.load(f).get("duration", DEFAULT_QUIZ_DURATION)
+            quiz_data = json.load(f)
+            duration = quiz_data.get("duration", DEFAULT_QUIZ_DURATION)
     else:
         duration = DEFAULT_QUIZ_DURATION
     return jsonify({"duration": duration})
@@ -180,25 +201,43 @@ def start_quiz():
         return jsonify({"error": "Student name required"}), 400
 
     if os.path.exists(DATA_FILE):
-        quiz_data = json.load(open(DATA_FILE))
-        quiz_id = quiz_data.get("quiz_id")
-        total_questions = len(quiz_data.get("questions", []))
-        duration = quiz_data.get("duration", DEFAULT_QUIZ_DURATION)
+        with open(DATA_FILE, 'r') as f:
+            quiz_data = json.load(f)
+            duration = quiz_data.get("duration", DEFAULT_QUIZ_DURATION)
+            quiz_id = quiz_data.get("quiz_id")
+            total_questions = len(quiz_data.get("questions", []))
     else:
+        duration = DEFAULT_QUIZ_DURATION
         quiz_id = "default"
         total_questions = 0
-        duration = DEFAULT_QUIZ_DURATION
 
     os.makedirs(os.path.dirname(RESULT_FILE), exist_ok=True)
-    results = json.load(open(RESULT_FILE)) if os.path.exists(RESULT_FILE) else []
+    results = []
+    if os.path.exists(RESULT_FILE):
+        with open(RESULT_FILE) as f:
+            results = json.load(f)
 
-    student_record = next((r for r in results if r["student"]==student and r.get("quiz_id")==quiz_id), None)
+    student_record = next((r for r in results if r["student"] == student and r.get("quiz_id") == quiz_id), None)
     if not student_record:
-        results.append({"student": student, "quiz_id": quiz_id, "score": 0, "total": total_questions, "start_time": datetime.now().isoformat(), "timestamp": None})
+        start_time = datetime.now().isoformat()
+        results.append({
+            "student": student,
+            "quiz_id": quiz_id,
+            "score": 0,
+            "total": total_questions,
+            "start_time": start_time,
+            "timestamp": None
+        })
         with open(RESULT_FILE, "w") as f:
             json.dump(results, f, indent=4)
+    else:
+        start_time = student_record.get("start_time", datetime.now().isoformat())
 
-    return jsonify({"quiz_id": quiz_id, "duration": duration})
+    return jsonify({
+        "start_time": start_time,
+        "duration": duration,
+        "quiz_id": quiz_id
+    })
 
 @app.route('/submit_quiz', methods=['POST'])
 @login_required(role="student")
@@ -209,28 +248,34 @@ def submit_quiz():
     student_answers = data.get("answers", [])
 
     if os.path.exists(DATA_FILE):
-        questions = json.load(open(DATA_FILE)).get("questions", [])
+        with open(DATA_FILE, 'r') as f:
+            quiz_data = json.load(f)
+            questions = quiz_data.get("questions", [])
     else:
         return jsonify({"error": "Quiz not found"}), 404
 
-    # Normalize answers: strip, lowercase, decode HTML
+    # normalize answers (strip, lowercase, decode HTML)
     def normalize(text):
         return html.unescape(text.strip().lower())
 
     score = 0
     for i, q in enumerate(questions):
         correct_answer = normalize(q.get("answer", ""))
-        submitted = normalize(student_answers[i]) if i < len(student_answers) else ""
-        if correct_answer == submitted:
+        submitted_answer = normalize(student_answers[i]) if i < len(student_answers) else ""
+        if correct_answer == submitted_answer:
             score += 1
 
     total = len(questions)
 
-    results = json.load(open(RESULT_FILE)) if os.path.exists(RESULT_FILE) else []
+    os.makedirs(os.path.dirname(RESULT_FILE), exist_ok=True)
+    results = []
+    if os.path.exists(RESULT_FILE):
+        with open(RESULT_FILE, "r") as f:
+            results = json.load(f)
 
     updated = False
     for r in results:
-        if r["student"]==student and r.get("quiz_id")==quiz_id:
+        if r["student"] == student and r.get("quiz_id") == quiz_id:
             r["score"] = score
             r["total"] = total
             r["timestamp"] = datetime.now().isoformat()
@@ -238,7 +283,13 @@ def submit_quiz():
             break
 
     if not updated:
-        results.append({"student": student, "quiz_id": quiz_id, "score": score, "total": total, "timestamp": datetime.now().isoformat()})
+        results.append({
+            "student": student,
+            "quiz_id": quiz_id,
+            "score": score,
+            "total": total,
+            "timestamp": datetime.now().isoformat()
+        })
 
     with open(RESULT_FILE, "w") as f:
         json.dump(results, f, indent=4)
@@ -249,22 +300,25 @@ def submit_quiz():
 @login_required()
 def leaderboard():
     results = []
-    if os.path.exists(RESULT_FILE):
-        results = json.load(open(RESULT_FILE))
+    try:
+        if os.path.exists(RESULT_FILE):
+            with open(RESULT_FILE) as f:
+                results = json.load(f)
 
-    # Normalize types
-    for r in results:
-        r["score"] = int(r.get("score",0))
-        r["total"] = int(r.get("total",0))
-        r["quiz_id"] = r.get("quiz_id") or "default"
-        r["timestamp"] = r.get("timestamp") or ""
+        for r in results:
+            r["score"] = int(r.get("score", 0))
+            r["total"] = int(r.get("total", 0))
+            r["timestamp"] = r.get("timestamp") or ""
+            r["quiz_id"] = r.get("quiz_id") or "default"
 
-    # Show only latest quiz
-    latest_quiz = results[-1]["quiz_id"] if results else None
-    if latest_quiz:
-        results = [r for r in results if r.get("quiz_id")==latest_quiz]
+        latest_quiz_id = results[-1]["quiz_id"] if results else None
+        if latest_quiz_id:
+            results = [r for r in results if r.get("quiz_id") == latest_quiz_id]
 
-    results.sort(key=lambda x: (-x["score"], x["timestamp"]))
+        results.sort(key=lambda x: (-x["score"], x["timestamp"]))
+    except Exception as e:
+        print("Leaderboard error:", e)
+        results = []
 
     return render_template("leaderboard.html", results=results)
 
